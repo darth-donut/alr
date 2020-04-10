@@ -21,7 +21,7 @@ copyright = '2020, Jia Hong Fong'
 author = 'Jia Hong Fong'
 
 # The full version, including alpha/beta/rc tags
-release = '0.0.1'
+release = '0.0.0b1'
 
 
 # -- General configuration ---------------------------------------------------

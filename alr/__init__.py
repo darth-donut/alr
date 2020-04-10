@@ -283,8 +283,9 @@ def stratified_partition(X_train: np.array, y_train: np.array, train_size: int =
     :param X_train: np.array
     :param y_train: np.array
     :param train_size: `X_train`'s output size
-    :return: (`X_train`, `y_train`, `X_pool`, `y_pool`) where `X_train.size(0) == train_size` and
-    `y_train`'s classes are as balanced as possible.
+    :return: (`X_train`, `y_train`, `X_pool`, `y_pool`) where
+             `X_train.size(0) == train_size` and
+             `y_train`'s classes are as balanced as possible.
     """
     sss = StratifiedShuffleSplit(n_splits=1, train_size=train_size)
     train_idxs, pool_idxs = next(sss.split(X_train, y_train))
