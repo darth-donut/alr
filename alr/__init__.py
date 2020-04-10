@@ -13,6 +13,8 @@ from torch import nn
 from torch.nn import functional as F
 from typing import Dict, List, Optional, Tuple, Any, Union, Callable
 
+__version__ = '0.0.0b1'
+
 
 class ALRDataset(torch.utils.data.Dataset):
     def __init__(self, X, y: Optional[np.array] = None):
