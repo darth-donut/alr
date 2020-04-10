@@ -383,7 +383,7 @@ class BALD(AcquisitionFunction):
                  device: Optional[torch.device] = None,
                  **data_loader_params):
         r"""
-        Implements BALD <https://arxiv.org/abs/1112.5745>`_.
+        Implements `BALD <https://arxiv.org/abs/1112.5745>`_.
 
         .. math::
 
