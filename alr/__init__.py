@@ -1,5 +1,5 @@
 """
-Main module
+Main alr module
 """
 
 import numpy as np
