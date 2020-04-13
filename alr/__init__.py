@@ -651,10 +651,10 @@ class EfficientICAL(AcquisitionFunction):
             scores[batch_idxs] = -np.inf
             # greedily take top l scores
             idxs = torch.argsort(scores, descending=True)
-            batch_idxs.extend(idxs[:l])
+            for idx in idxs[:l]: batch_idxs.append(idx.item())
         # greedily taking top l might sometimes acquire extra points if
         # b is not divisible by l, hence, truncate the output
-        return batch_idxs[:b]
+        return np.array(batch_idxs[:b])
 
     @staticmethod
     def rational_quadratic(alphas: Optional[Sequence[float]] = (.2, .5, 1, 2, 5),
@@ -710,15 +710,14 @@ class EfficientICAL(AcquisitionFunction):
             return x.new_zeros(size=(K,))
         # https://github.com/NiklasPfister/dHSIC/blob/master/dHSIC/R/dhsic.R
         # logspace
-        # todo: why log x?
         x = torch.log(x)
-        logn = torch.log(N)
+        logn = np.log(N)
         term1 = torch.sum(x, dim=-1).logsumexp(dim=(1, 2)) - 2 * logn
         term2 = torch.logsumexp(x, dim=(1, 2)).sum(dim=-1) - (2 * D * logn)
         # todo: does it matter that we reduced dim=1 first before dim=2 (both N)
         term3 = (torch.logsumexp(x, dim=1)
                       .sum(dim=-1)
-                      .logsumexp(dim=-1) + torch.log(2) - (D + 1) * logn)
+                      .logsumexp(dim=-1) + np.log(2) - (D + 1) * logn)
         assert term1.size() == term2.size() == term3.size() == (K,)
         # not numerically stable
         # res = term1.exp_() + term2.exp_() - term3.exp_()
@@ -727,5 +726,5 @@ class EfficientICAL(AcquisitionFunction):
         assert term_max.size() == (K,)
         res = (term1 - term_max).exp_() + (term2 - term_max).exp_() - (term3 - term_max).exp_()
         res *= term_max.exp_()
-        assert torch.isfinite(res)
+        assert torch.isfinite(res).all()
         return res
