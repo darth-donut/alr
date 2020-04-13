@@ -64,23 +64,9 @@
 <h3><span class="hidden-section">ALRModel</span><a class="headerlink" href="#alrmodel" title="Permalink to this headline">¶</a></h3>
 <dl class="class">
 <dt id="alr.ALRModel">
-<em class="property">class </em><code class="sig-prename descclassname">alr.</code><code class="sig-name descname">ALRModel</code><span class="sig-paren">(</span><em class="sig-param">model: torch.nn.modules.module.Module</em><span class="sig-paren">)</span><a class="headerlink" href="#alr.ALRModel" title="Permalink to this definition">¶</a></dt>
-<dd><p>Wraps and creates a <a class="reference internal" href="#alr.ALRModel" title="alr.ALRModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ALRModel</span></code></a>.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>model</strong> – pytorch <cite>torch.nn.Module</cite> object</p>
-</dd>
-</dl>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p><cite>model</cite> must be a PyTorch <cite>Module</cite> object.</p>
-</div>
-<p>Example:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">([</span><span class="o">...</span><span class="p">])</span>
-<span class="c1"># MCDropout inherits ALRModel</span>
-<span class="n">model</span> <span class="o">=</span> <span class="n">MCDropout</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-</pre></div>
-</div>
+<em class="property">class </em><code class="sig-prename descclassname">alr.</code><code class="sig-name descname">ALRModel</code><a class="headerlink" href="#alr.ALRModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>A <a class="reference internal" href="#alr.ALRModel" title="alr.ALRModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ALRModel</span></code></a> provides generic methods required for common
+operations in active learning experiments.</p>
 <dl class="method">
 <dt id="alr.ALRModel.forward">
 <em class="property">abstract </em><code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param">x: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#alr.ALRModel.forward" title="Permalink to this definition">¶</a></dt>
@@ -115,7 +101,7 @@ in which case, this function should return multiple stochastic forward passes.</
 <dl class="method">
 <dt id="alr.ALRModel.reset_weights">
 <code class="sig-name descname">reset_weights</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#alr.ALRModel.reset_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Resets the model’s weights</p>
+<dd><p>Resets the model’s weights.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns</dt>
 <dd class="field-odd"><p>None</p>
@@ -140,7 +126,7 @@ override the __call__ method.</p>
 <h3><span class="hidden-section">MCDropout</span><a class="headerlink" href="#mcdropout" title="Permalink to this headline">¶</a></h3>
 <dl class="class">
 <dt id="alr.MCDropout">
-<em class="property">class </em><code class="sig-prename descclassname">alr.</code><code class="sig-name descname">MCDropout</code><span class="sig-paren">(</span><em class="sig-param">model</em>, <em class="sig-param">forward=100</em><span class="sig-paren">)</span><a class="headerlink" href="#alr.MCDropout" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">alr.</code><code class="sig-name descname">MCDropout</code><span class="sig-paren">(</span><em class="sig-param">model: torch.nn.modules.module.Module</em>, <em class="sig-param">forward: int = 100</em><span class="sig-paren">)</span><a class="headerlink" href="#alr.MCDropout" title="Permalink to this definition">¶</a></dt>
 <dd><p>Implements <a class="reference external" href="https://arxiv.org/abs/1506.02142">Monte Carlo Dropout</a> (MCD). The difference between
 <a class="reference internal" href="#alr.MCDropout.forward" title="alr.MCDropout.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> and <a class="reference internal" href="#alr.MCDropout.predict" title="alr.MCDropout.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a>
 is that the former returns a single forward pass (logits) while the
@@ -370,6 +356,42 @@ incorrect if the <cite>DataLoader</cite> object shuffles <cite>X_pool</cite>!</p
 </dd></dl>
 
 </div>
+<div class="section" id="efficientical">
+<h3><span class="hidden-section">EfficientICAL</span><a class="headerlink" href="#efficientical" title="Permalink to this headline">¶</a></h3>
+<dl class="class">
+<dt id="alr.EfficientICAL">
+<em class="property">class </em><code class="sig-prename descclassname">alr.</code><code class="sig-name descname">EfficientICAL</code><span class="sig-paren">(</span><em class="sig-param">model: alr.MCDropout, kernel_fn: Optional[Callable[[torch.Tensor], torch.Tensor]] = None, subset: Optional[int] = 200, greedy_acquire: Optional[int] = 1, device: Optional[torch.device] = None, **data_loader_params</em><span class="sig-paren">)</span><a class="headerlink" href="#alr.EfficientICAL" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="method">
+<dt id="alr.EfficientICAL.dHSIC">
+<em class="property">static </em><code class="sig-name descname">dHSIC</code><span class="sig-paren">(</span><em class="sig-param">x: torch.Tensor</em>, <em class="sig-param">y</em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#alr.EfficientICAL.dHSIC" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes HSIC for d-variables in a batch of size <span class="math notranslate nohighlight">\(K\)</span>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>While the values are computed in logspace for numerical stability,
+the returned value is casted back to its original space.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> – <p>tensor of shape <span class="math notranslate nohighlight">\(K \times N \times N \times D\)</span> where:</p>
+<ul>
+<li><p><span class="math notranslate nohighlight">\(K\)</span> is the batch size</p></li>
+<li><p><span class="math notranslate nohighlight">\(N\)</span> is the number of samples in each variable</p></li>
+<li><p><span class="math notranslate nohighlight">\(D\)</span> is the number of variables</p></li>
+</ul>
+</p></li>
+<li><p><strong>y</strong> – testing only</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>dHSIC scores, a tensor of shape <span class="math notranslate nohighlight">\(K\)</span>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
 </div>
 <div class="section" id="functions">
 <h2>Functions<a class="headerlink" href="#functions" title="Permalink to this headline">¶</a></h2>
@@ -407,7 +429,7 @@ incorrect if the <cite>DataLoader</cite> object shuffles <cite>X_pool</cite>!</p
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># load pre-processed data into tensor objects</span>
 <span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span> <span class="o">=</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">y_test</span> <span class="o">=</span> <span class="n">X_pool</span><span class="p">,</span> <span class="n">y_pool</span> <span class="o">=</span> <span class="o">...</span>
 
-<span class="c1"># create test dataset and create DataLodader object</span>
+<span class="c1"># create test dataset and create DataLoader object</span>
 <span class="n">test_dataset</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">DataLoader</span><span class="p">(</span><span class="n">ALRDataset</span><span class="p">(</span><span class="n">X_test</span><span class="p">,</span> <span class="n">y_test</span><span class="p">),</span>
                                            <span class="n">batch_size</span><span class="o">=</span><span class="mi">2048</span><span class="p">,</span> <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
                                            <span class="n">shuffle</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
@@ -420,7 +442,8 @@ incorrect if the <cite>DataLoader</cite> object shuffles <cite>X_pool</cite>!</p
 <span class="n">afunction</span> <span class="o">=</span> <span class="n">RandomAcquisition</span><span class="p">()</span>
 <span class="n">history</span> <span class="o">=</span> <span class="n">run_experiment</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">afunction</span><span class="p">,</span> <span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">,</span> <span class="n">X_pool</span><span class="p">,</span> <span class="n">y_pool</span><span class="p">,</span>
                          <span class="n">test_dataset</span><span class="p">,</span> <span class="n">optimiser</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">iters</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">init_epochs</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
-                         <span class="n">epochs</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">64</span><span class="p">)</span>
+                         <span class="n">epochs</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
+                         <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="field-list simple">
@@ -472,6 +495,7 @@ incorrect if the <cite>DataLoader</cite> object shuffles <cite>X_pool</cite>!</p
 <li><a class="reference internal" href="#randomacquisition"><span class="hidden-section">RandomAcquisition</span></a></li>
 <li><a class="reference internal" href="#bald"><span class="hidden-section">BALD</span></a></li>
 <li><a class="reference internal" href="#ical"><span class="hidden-section">ICAL</span></a></li>
+<li><a class="reference internal" href="#efficientical"><span class="hidden-section">EfficientICAL</span></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#functions">Functions</a><ul>

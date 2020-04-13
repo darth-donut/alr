@@ -67,6 +67,13 @@ Classses
     :members:
 
 
+:hidden:`EfficientICAL`
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: EfficientICAL
+    :members:
+
+
 
 Functions
 ---------
