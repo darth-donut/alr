@@ -36,26 +36,13 @@ class ALRDataset(torch.utils.data.Dataset):
 
 
 class ALRModel(nn.Module, ABC):
-    def __init__(self, model: nn.Module):
+    def __init__(self):
         """
-        Wraps and creates a :class:`ALRModel`.
-
-        :param model: pytorch `torch.nn.Module` object
-
-        .. note::
-            `model` must be a PyTorch `Module` object.
-
-        Example:
-
-        .. code:: python
-
-            model = torch.nn.Sequential([...])
-            # MCDropout inherits ALRModel
-            model = MCDropout(model)
+        A :class:`ALRModel` provides generic methods required for common
+        operations in active learning experiments.
         """
         super(ALRModel, self).__init__()
-        self._init_state = model.state_dict()
-        self.base_model = model
+        self._models = []
 
     @abstractmethod
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -81,11 +68,19 @@ class ALRModel(nn.Module, ABC):
 
     def reset_weights(self) -> None:
         """
-        Resets the model's weights
+        Resets the model's weights.
 
         :return: None
         """
-        self.base_model.load_state_dict(self._init_state)
+        for m, state in self._models:
+            # reload initial states
+            m.load_state_dict(state)
+
+    def __setattr__(self, key, value):
+        super(ALRModel, self).__setattr__(key, value)
+        if isinstance(value, nn.Module):
+            # register nn.Module
+            self._models.append((value, value.state_dict()))
 
 
 class AcquisitionFunction(ABC):
@@ -99,7 +94,7 @@ class AcquisitionFunction(ABC):
 
 
 class MCDropout(ALRModel):
-    def __init__(self, model, forward=100):
+    def __init__(self, model: nn.Module, forward: int = 100):
         """
         Implements `Monte Carlo Dropout <https://arxiv.org/abs/1506.02142>`_ (MCD). The difference between
         :meth:`forward` and :meth:`predict`
@@ -109,7 +104,7 @@ class MCDropout(ALRModel):
         :param model: base `torch.nn.Module` object
         :param forward: number of stochastic forward passes
         """
-        super(MCDropout, self).__init__(model)
+        super(MCDropout, self).__init__()
         self.base_model = model
         self.n_forward = forward
 
