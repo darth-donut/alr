@@ -290,8 +290,9 @@ as a <code class="xref py py-class docutils literal notranslate"><span class="pr
 <p>where <span class="math notranslate nohighlight">\(\hat{p}^t_c\)</span> is the softmax output of class <span class="math notranslate nohighlight">\(c\)</span>
 on the <span class="math notranslate nohighlight">\(t^{th}\)</span> stochastic iteration.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">MCDropout</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-<span class="n">bald</span> <span class="o">=</span> <span class="n">BALD</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">subset</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span>
-            <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">bald</span> <span class="o">=</span> <span class="n">BALD</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">subset</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span> <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">num_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <span class="n">bald</span><span class="p">(</span><span class="n">X_pool</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -319,7 +320,7 @@ incorrect if the <cite>DataLoader</cite> object shuffles <cite>X_pool</cite>!</p
 <h3><span class="hidden-section">ICAL</span><a class="headerlink" href="#ical" title="Permalink to this headline">¶</a></h3>
 <dl class="class">
 <dt id="alr.ICAL">
-<em class="property">class </em><code class="sig-prename descclassname">alr.</code><code class="sig-name descname">ICAL</code><span class="sig-paren">(</span><em class="sig-param">model: alr.MCDropout, kernel: Callable[[torch.Tensor, torch.Tensor], float], r: int = 200, device: Optional[torch.device] = None, **data_loader_params</em><span class="sig-paren">)</span><a class="headerlink" href="#alr.ICAL" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">alr.</code><code class="sig-name descname">ICAL</code><span class="sig-paren">(</span><em class="sig-param">model: alr.MCDropout, kernel_fn: Optional[Callable[[torch.Tensor], torch.Tensor]] = None, subset: Optional[int] = 200, greedy_acquire: Optional[int] = 1, device: Optional[torch.device] = None, **data_loader_params</em><span class="sig-paren">)</span><a class="headerlink" href="#alr.ICAL" title="Permalink to this definition">¶</a></dt>
 <dd><p>Implements ‘normal’ <a class="reference external" href="https://arxiv.org/abs/2002.07916">ICAL</a>. <span class="math notranslate nohighlight">\(R\)</span> points
 are randomly drawn from the pool and the average of the candidate batch’s kernels
 is used instead. Thus, the dependency measure reduces to <span class="math notranslate nohighlight">\(d = 2\)</span>.</p>
@@ -327,10 +328,9 @@ is used instead. Thus, the dependency measure reduces to <span class="math notra
 \[\frac{1}{|\mathcal{R}|} d\text{HSIC}(\displaystyle\sum_{x'\in\mathcal{R}} k^{x'},
 \frac{1}{B} \displaystyle\sum_{i = 1}^{B} k^{x_i})\]</div>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">MCDropout</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-<span class="n">ical</span> <span class="o">=</span> <span class="n">ICAL</span><span class="p">(</span><span class="n">model</span><span class="p">,</span>
-            <span class="n">ICAL</span><span class="o">.</span><span class="n">rational_quadratic</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span>
-            <span class="n">r</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span> <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">num_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">ical</span> <span class="o">=</span> <span class="n">ICAL</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span>
+            <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <span class="n">ical</span><span class="p">(</span><span class="n">X_pool</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -339,9 +339,11 @@ is used instead. Thus, the dependency measure reduces to <span class="math notra
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>model</strong> – A <a class="reference internal" href="#alr.MCDropout" title="alr.MCDropout"><code class="xref py py-class docutils literal notranslate"><span class="pre">MCDropout</span></code></a> model is required to calculate
 the <cite>m</cite> different samples of <span class="math notranslate nohighlight">\(p(y | \omega^{(m)})\)</span>.</p></li>
-<li><p><strong>kernel</strong> – Kernel function, see static methods of <a class="reference internal" href="#alr.ICAL" title="alr.ICAL"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICAL</span></code></a></p></li>
-<li><p><strong>r</strong> – Normal ICAL uses a subset of <cite>X_pool</cite>. <cite>r</cite> specifies the
-size of this subset. Use -1 to denote the entire pool.</p></li>
+<li><p><strong>kernel_fn</strong> – Kernel function, see static methods of <a class="reference internal" href="#alr.ICAL" title="alr.ICAL"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICAL</span></code></a></p></li>
+<li><p><strong>subset</strong> – Normal ICAL uses a subset of <cite>X_pool</cite>. <cite>subset</cite> specifies the
+size of this subset (<span class="math notranslate nohighlight">\(|\mathcal{R}|\)</span> in the paper).
+Use -1 to denote the entire pool.</p></li>
+<li><p><strong>greedy_acquire</strong> – how many points to acquire at once in each acquisition step.</p></li>
 <li><p><strong>device</strong> – <cite>torch.device</cite> object.</p></li>
 <li><p><strong>data_loader_params</strong> – params to be passed into <cite>DataLoader</cite> when
 iterating over <cite>X_pool</cite>.</p></li>
@@ -353,42 +355,6 @@ iterating over <cite>X_pool</cite>.</p></li>
 <p>Do not set <cite>shuffle=True</cite> in <cite>data_loader_params</cite>! The indices will be
 incorrect if the <cite>DataLoader</cite> object shuffles <cite>X_pool</cite>!</p>
 </div>
-</dd></dl>
-
-</div>
-<div class="section" id="efficientical">
-<h3><span class="hidden-section">EfficientICAL</span><a class="headerlink" href="#efficientical" title="Permalink to this headline">¶</a></h3>
-<dl class="class">
-<dt id="alr.EfficientICAL">
-<em class="property">class </em><code class="sig-prename descclassname">alr.</code><code class="sig-name descname">EfficientICAL</code><span class="sig-paren">(</span><em class="sig-param">model: alr.MCDropout, kernel_fn: Optional[Callable[[torch.Tensor], torch.Tensor]] = None, subset: Optional[int] = 200, greedy_acquire: Optional[int] = 1, device: Optional[torch.device] = None, **data_loader_params</em><span class="sig-paren">)</span><a class="headerlink" href="#alr.EfficientICAL" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="method">
-<dt id="alr.EfficientICAL.dHSIC">
-<em class="property">static </em><code class="sig-name descname">dHSIC</code><span class="sig-paren">(</span><em class="sig-param">x: torch.Tensor</em>, <em class="sig-param">y</em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#alr.EfficientICAL.dHSIC" title="Permalink to this definition">¶</a></dt>
-<dd><p>Computes HSIC for d-variables in a batch of size <span class="math notranslate nohighlight">\(K\)</span>.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>While the values are computed in logspace for numerical stability,
-the returned value is casted back to its original space.</p>
-</div>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>x</strong> – <p>tensor of shape <span class="math notranslate nohighlight">\(K \times N \times N \times D\)</span> where:</p>
-<ul>
-<li><p><span class="math notranslate nohighlight">\(K\)</span> is the batch size</p></li>
-<li><p><span class="math notranslate nohighlight">\(N\)</span> is the number of samples in each variable</p></li>
-<li><p><span class="math notranslate nohighlight">\(D\)</span> is the number of variables</p></li>
-</ul>
-</p></li>
-<li><p><strong>y</strong> – testing only</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>dHSIC scores, a tensor of shape <span class="math notranslate nohighlight">\(K\)</span>.</p>
-</dd>
-</dl>
-</dd></dl>
-
 </dd></dl>
 
 </div>
@@ -495,7 +461,6 @@ the returned value is casted back to its original space.</p>
 <li><a class="reference internal" href="#randomacquisition"><span class="hidden-section">RandomAcquisition</span></a></li>
 <li><a class="reference internal" href="#bald"><span class="hidden-section">BALD</span></a></li>
 <li><a class="reference internal" href="#ical"><span class="hidden-section">ICAL</span></a></li>
-<li><a class="reference internal" href="#efficientical"><span class="hidden-section">EfficientICAL</span></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#functions">Functions</a><ul>

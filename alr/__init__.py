@@ -400,8 +400,9 @@ class BALD(AcquisitionFunction):
         .. code:: python
 
             model = MCDropout(...)
-            bald = BALD(model, subset=-1, batch_size=512,
-                        pin_memory=True, num_workers=2)
+            bald = BALD(model, subset=-1, device=device,
+                        batch_size=512, pin_memory=True,
+                        num_workers=2)
             bald(X_pool, b=10)
 
 
@@ -450,8 +451,12 @@ class BALD(AcquisitionFunction):
 
 
 class ICAL(AcquisitionFunction):
-    def __init__(self, model: MCDropout, kernel: Callable[[torch.Tensor, torch.Tensor], float],
-                 r: int = 200, device: Optional[torch.device] = None, **data_loader_params):
+    def __init__(self, model: MCDropout,
+                 kernel_fn: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+                 subset: Optional[int] = 200,
+                 greedy_acquire: Optional[int] = 1,
+                 device: Optional[torch.device] = None,
+                 **data_loader_params):
         r"""
         Implements 'normal' `ICAL <https://arxiv.org/abs/2002.07916>`_. :math:`R` points
         are randomly drawn from the pool and the average of the candidate batch's kernels
@@ -465,17 +470,18 @@ class ICAL(AcquisitionFunction):
         .. code:: python
 
             model = MCDropout(...)
-            ical = ICAL(model,
-                        ICAL.rational_quadratic(alpha=2),
-                        r=1024, batch_size=512, pin_memory=True,
-                        num_workers=2)
+            ical = ICAL(model, device=device,
+                        batch_size=512,
+                        pin_memory=True, num_workers=2)
             ical(X_pool, b=10)
 
         :param model: A :class:`MCDropout` model is required to calculate
                       the `m` different samples of :math:`p(y | \omega^{(m)})`.
-        :param kernel: Kernel function, see static methods of :class:`ICAL`
-        :param r: Normal ICAL uses a subset of `X_pool`. `r` specifies the
-                  size of this subset. Use -1 to denote the entire pool.
+        :param kernel_fn: Kernel function, see static methods of :class:`ICAL`
+        :param subset: Normal ICAL uses a subset of `X_pool`. `subset` specifies the
+                  size of this subset (:math:`|\mathcal{R}|` in the paper).
+                  Use -1 to denote the entire pool.
+        :param greedy_acquire: how many points to acquire at once in each acquisition step.
         :param device: `torch.device` object.
         :param data_loader_params: params to be passed into `DataLoader` when
                                    iterating over `X_pool`.
@@ -484,128 +490,13 @@ class ICAL(AcquisitionFunction):
             Do not set `shuffle=True` in `data_loader_params`! The indices will be
             incorrect if the `DataLoader` object shuffles `X_pool`!
         """
-        self._device = device
-        self._model = model
-        self._r = r
-        self._kernel = kernel
-        self._dl_params = data_loader_params
-        assert not self._dl_params.get('shuffle', False)
-
-    def __call__(self, X_pool: torch.Tensor, b: int) -> np.array:
-        mcmodel = self._model
-        mcmodel.train()
-        pool_size = X_pool.size(0)
-        r = min(self._r, pool_size)
-        if r == -1:
-            r = pool_size
-        idxs = []
-        B_kernels = torch.empty(size=(b, mcmodel.n_forward, mcmodel.n_forward),
-                                dtype=torch.float64, device=self._device)
-        with torch.no_grad():
-            for i in range(b):
-                rand_idxs = self._random_idx(n=r, high=pool_size, idxs=idxs)
-                X_pool_sub = X_pool[rand_idxs]
-                dl = torch.utils.data.DataLoader(ALRDataset(X_pool_sub), **self._dl_params)
-                mc_preds = torch.cat(
-                    [mcmodel.stochastic_forward(x.to(self._device) if self._device else x) for x in dl],
-                    dim=1
-                )
-                assert mc_preds.size()[:-1] == (mcmodel.n_forward, r)
-                R_kernels = torch.empty(size=(r, mcmodel.n_forward, mcmodel.n_forward), dtype=torch.float64,
-                                        device=self._device)
-                for j in range(r):
-                    R_kernels[j] = self._gram_matrix(mc_preds[:, j, :])
-
-                max_score, max_idx = float('-inf'), None
-                for j in range(r):
-                    B_kernels[i] = R_kernels[j]
-                    score = self._dhsic(torch.sum(R_kernels, dim=0), torch.mean(B_kernels[:(i + 1)], dim=0))
-                    assert not np.isinf(score)
-                    if score > max_score:
-                        max_score = score
-                        max_idx = j
-
-                B_kernels[i] = R_kernels[max_idx]
-                idxs.append(rand_idxs[max_idx])
-
-        assert np.unique(idxs).shape[0] == len(idxs)
-        return np.array(idxs)
-
-    @staticmethod
-    def _random_idx(n, high, idxs: list = []) -> np.array:
-        """
-        Returns an array of indices (of length `n`) where the highest value is `high` and
-        the indices in `idxs` are masked (i.e. returned array will not have
-        indices specified in `idxs`).
-
-        :param n: number of indices to return
-        :param high: highest index value
-        :param idxs: indices that shouldn't be in the resulting array
-        :return: np.array of indices
-        """
-        mask = np.ones(high)
-        mask[idxs] = 0
-        mask[mask == 1] = 1.0 / np.sum(mask)
-        return np.random.choice(high, size=n, replace=False, p=mask)
-
-    def _gram_matrix(self, x: torch.Tensor) -> torch.Tensor:
-        assert x.dim() == 2
-        N = x.size(0)
-        # use float64 to prevent term2 from overflowing
-        kernels = torch.empty(size=(N, N), dtype=torch.float64, device=self._device)
-        for i in range(N):
-            for j in range(i, N):
-                kernels[i, j] = self._kernel(x[i, :], x[j, :])
-                kernels[j, i] = kernels[i, j]
-        return kernels
-
-    def _dhsic(self, *kernels) -> float:
-        """
-        Calculates the dHSIC scores for all d variables in `kernels`
-
-        :param kernels: list of tensor objects
-        :return: dHSIC score
-        """
-        D = len(kernels)
-        N = kernels[0].size(0)
-        # trivial case, definition 2.6 https://arxiv.org/pdf/1603.00285.pdf
-        if N < 2 * D: return 0
-        kernels = torch.stack(kernels)
-        assert kernels.size() == (D, N, N)
-        # https://github.com/NiklasPfister/dHSIC/blob/master/dHSIC/R/dhsic.R
-        term1 = torch.sum(torch.prod(kernels, dim=0)).item() / N ** 2
-        term2 = torch.prod(torch.sum(kernels, dim=(1, 2))).item() / N ** (2 * D)
-        term3 = 2 / N ** (D + 1) * torch.sum(torch.prod(torch.sum(kernels, dim=1), dim=0)).item()
-        return term1 + term2 - term3
-
-    @staticmethod
-    def rational_quadratic(alpha: float):
-        # eq. 6 of https://arxiv.org/pdf/1801.01401.pdf
-        def _rational_quadratic(x1, x2):
-            assert x1.shape == x2.shape
-            return (1 + torch.norm(x1 - x2).item() / (2 * alpha)) ** (-alpha)
-        return _rational_quadratic
-
-    @staticmethod
-    def sigmoid(x1: torch.Tensor, x2: torch.Tensor) -> float:
-        assert x1.shape == x2.shape
-        return torch.tanh(torch.sum(x1 * x2)).item()
-
-
-class EfficientICAL(AcquisitionFunction):
-    def __init__(self, model: MCDropout,
-                 kernel_fn: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
-                 subset: Optional[int] = 200,
-                 greedy_acquire: Optional[int] = 1,
-                 device: Optional[torch.device] = None,
-                 **data_loader_params):
         self._r = subset
         self._model = model
         self._dl_params = data_loader_params
         self._device = device
         self._l = greedy_acquire
         if kernel_fn is None:
-            self._kernel = EfficientICAL.rational_quadratic()
+            self._kernel = ICAL.rational_quadratic()
         else:
             self._kernel = kernel_fn
         assert not self._dl_params.get('shuffle', False)
@@ -714,14 +605,11 @@ class EfficientICAL(AcquisitionFunction):
         logn = np.log(N)
         term1 = torch.sum(x, dim=-1).logsumexp(dim=(1, 2)) - 2 * logn
         term2 = torch.logsumexp(x, dim=(1, 2)).sum(dim=-1) - (2 * D * logn)
-        # todo: does it matter that we reduced dim=1 first before dim=2 (both N)
         term3 = (torch.logsumexp(x, dim=1)
                       .sum(dim=-1)
                       .logsumexp(dim=-1) + np.log(2) - (D + 1) * logn)
         assert term1.size() == term2.size() == term3.size() == (K,)
-        # not numerically stable
-        # res = term1.exp_() + term2.exp_() - term3.exp_()
-        # need to return logsumexp([term1, term2, term3]) but we don't need the final log
+        # subtract max for numerical stabilisation
         term_max = torch.stack([term1, term2, term3], dim=0).max(dim=0)[0]
         assert term_max.size() == (K,)
         res = (term1 - term_max).exp_() + (term2 - term_max).exp_() - (term3 - term_max).exp_()
