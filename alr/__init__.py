@@ -595,8 +595,8 @@ class ICAL(AcquisitionFunction):
         assert N == N2
         # trivial case, definition 2.6 https://arxiv.org/pdf/1603.00285.pdf
         if N < 2 * D:
-            warnings.warn(f"The number of samples is lesser than half "
-                          f"of the number of variables in dHISC. Trivial "
+            warnings.warn(f"The number of samples is lesser than twice "
+                          f"the number of variables in dHISC. Trivial "
                           f"case of 0; this may or may not be intended.")
             return x.new_zeros(size=(K,))
         # https://github.com/NiklasPfister/dHSIC/blob/master/dHSIC/R/dhsic.R
