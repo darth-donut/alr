@@ -14,12 +14,23 @@ try:
 except:
     long_description = ''
 
+
+# get version from __init__.py
+def get_version(rel_path):
+    for line in open(rel_path).read().splitlines():
+        if line.startswith('__version__'):
+            delim = '"' if '"' in line else "'"
+            return line.split(delim)[1]
+    else:
+        raise RuntimeError("Unable to find version string.")
+
+
 setup(
     name="alr",
     # Versions should comply with PEP440.  For a discussion on single-sourcing
     # the version across setup.py and the project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
-    version="0.0.0b1",
+    version=get_version(path.join("alr", "__init__.py")),
     description="Active learning research library",
     # Fix windows newlines.
     long_description=long_description.replace("\r\n", "\n"),

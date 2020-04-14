@@ -12,7 +12,8 @@
 #
 import os
 import sys
-sys.path.insert(0, os.path.abspath(os.path.join('..', '..')))
+ALR_ROOT = os.path.abspath(os.path.join('..', '..'))
+sys.path.insert(0, ALR_ROOT)
 
 # -- Project information -----------------------------------------------------
 
@@ -20,8 +21,18 @@ project = 'alr'
 copyright = '2020, Jia Hong Fong'
 author = 'Jia Hong Fong'
 
+
 # The full version, including alpha/beta/rc tags
-release = '0.0.0b1'
+def get_version(rel_path):
+    for line in open(rel_path).read().splitlines():
+        if line.startswith('__version__'):
+            delim = '"' if '"' in line else "'"
+            return line.split(delim)[1]
+    else:
+        raise RuntimeError("Unable to find version string.")
+
+
+release = get_version(os.path.join(ALR_ROOT, "alr", "__init__.py"))
 
 
 # -- General configuration ---------------------------------------------------

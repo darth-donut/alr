@@ -64,23 +64,9 @@
 <h3><span class="hidden-section">ALRModel</span><a class="headerlink" href="#alrmodel" title="Permalink to this headline">¶</a></h3>
 <dl class="class">
 <dt id="alr.ALRModel">
-<em class="property">class </em><code class="sig-prename descclassname">alr.</code><code class="sig-name descname">ALRModel</code><span class="sig-paren">(</span><em class="sig-param">model: torch.nn.modules.module.Module</em><span class="sig-paren">)</span><a class="headerlink" href="#alr.ALRModel" title="Permalink to this definition">¶</a></dt>
-<dd><p>Wraps and creates a <a class="reference internal" href="#alr.ALRModel" title="alr.ALRModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ALRModel</span></code></a>.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>model</strong> – pytorch <cite>torch.nn.Module</cite> object</p>
-</dd>
-</dl>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p><cite>model</cite> must be a PyTorch <cite>Module</cite> object.</p>
-</div>
-<p>Example:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">([</span><span class="o">...</span><span class="p">])</span>
-<span class="c1"># MCDropout inherits ALRModel</span>
-<span class="n">model</span> <span class="o">=</span> <span class="n">MCDropout</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-</pre></div>
-</div>
+<em class="property">class </em><code class="sig-prename descclassname">alr.</code><code class="sig-name descname">ALRModel</code><a class="headerlink" href="#alr.ALRModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>A <a class="reference internal" href="#alr.ALRModel" title="alr.ALRModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ALRModel</span></code></a> provides generic methods required for common
+operations in active learning experiments.</p>
 <dl class="method">
 <dt id="alr.ALRModel.forward">
 <em class="property">abstract </em><code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param">x: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="headerlink" href="#alr.ALRModel.forward" title="Permalink to this definition">¶</a></dt>
@@ -115,7 +101,7 @@ in which case, this function should return multiple stochastic forward passes.</
 <dl class="method">
 <dt id="alr.ALRModel.reset_weights">
 <code class="sig-name descname">reset_weights</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#alr.ALRModel.reset_weights" title="Permalink to this definition">¶</a></dt>
-<dd><p>Resets the model’s weights</p>
+<dd><p>Resets the model’s weights.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns</dt>
 <dd class="field-odd"><p>None</p>
@@ -140,7 +126,7 @@ override the __call__ method.</p>
 <h3><span class="hidden-section">MCDropout</span><a class="headerlink" href="#mcdropout" title="Permalink to this headline">¶</a></h3>
 <dl class="class">
 <dt id="alr.MCDropout">
-<em class="property">class </em><code class="sig-prename descclassname">alr.</code><code class="sig-name descname">MCDropout</code><span class="sig-paren">(</span><em class="sig-param">model</em>, <em class="sig-param">forward=100</em><span class="sig-paren">)</span><a class="headerlink" href="#alr.MCDropout" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">alr.</code><code class="sig-name descname">MCDropout</code><span class="sig-paren">(</span><em class="sig-param">model: torch.nn.modules.module.Module</em>, <em class="sig-param">forward: int = 100</em><span class="sig-paren">)</span><a class="headerlink" href="#alr.MCDropout" title="Permalink to this definition">¶</a></dt>
 <dd><p>Implements <a class="reference external" href="https://arxiv.org/abs/1506.02142">Monte Carlo Dropout</a> (MCD). The difference between
 <a class="reference internal" href="#alr.MCDropout.forward" title="alr.MCDropout.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> and <a class="reference internal" href="#alr.MCDropout.predict" title="alr.MCDropout.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a>
 is that the former returns a single forward pass (logits) while the
@@ -294,7 +280,7 @@ as a <code class="xref py py-class docutils literal notranslate"><span class="pr
 <dl class="class">
 <dt id="alr.BALD">
 <em class="property">class </em><code class="sig-prename descclassname">alr.</code><code class="sig-name descname">BALD</code><span class="sig-paren">(</span><em class="sig-param">model: alr.MCDropout</em>, <em class="sig-param">subset: Optional[int] = -1</em>, <em class="sig-param">device: Optional[torch.device] = None</em>, <em class="sig-param">**data_loader_params</em><span class="sig-paren">)</span><a class="headerlink" href="#alr.BALD" title="Permalink to this definition">¶</a></dt>
-<dd><p>Implements BALD &lt;<a class="reference external" href="https://arxiv.org/abs/1112.5745">https://arxiv.org/abs/1112.5745</a>&gt;`_.</p>
+<dd><p>Implements <a class="reference external" href="https://arxiv.org/abs/1112.5745">BALD</a>.</p>
 <div class="math notranslate nohighlight">
 \[\begin{align}
     -\sum_c\left(\frac{1}{T}\sum_t\hat{p}^t_c \right)
@@ -304,8 +290,9 @@ as a <code class="xref py py-class docutils literal notranslate"><span class="pr
 <p>where <span class="math notranslate nohighlight">\(\hat{p}^t_c\)</span> is the softmax output of class <span class="math notranslate nohighlight">\(c\)</span>
 on the <span class="math notranslate nohighlight">\(t^{th}\)</span> stochastic iteration.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">MCDropout</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-<span class="n">bald</span> <span class="o">=</span> <span class="n">BALD</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">subset</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span>
-            <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">bald</span> <span class="o">=</span> <span class="n">BALD</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">subset</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span> <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">num_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <span class="n">bald</span><span class="p">(</span><span class="n">X_pool</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -333,7 +320,7 @@ incorrect if the <cite>DataLoader</cite> object shuffles <cite>X_pool</cite>!</p
 <h3><span class="hidden-section">ICAL</span><a class="headerlink" href="#ical" title="Permalink to this headline">¶</a></h3>
 <dl class="class">
 <dt id="alr.ICAL">
-<em class="property">class </em><code class="sig-prename descclassname">alr.</code><code class="sig-name descname">ICAL</code><span class="sig-paren">(</span><em class="sig-param">model: alr.MCDropout, kernel: Callable[[torch.Tensor, torch.Tensor], float], r: int = 200, device: Optional[torch.device] = None, **data_loader_params</em><span class="sig-paren">)</span><a class="headerlink" href="#alr.ICAL" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">alr.</code><code class="sig-name descname">ICAL</code><span class="sig-paren">(</span><em class="sig-param">model: alr.MCDropout, kernel_fn: Optional[Callable[[torch.Tensor], torch.Tensor]] = None, subset: Optional[int] = 200, greedy_acquire: Optional[int] = 1, device: Optional[torch.device] = None, **data_loader_params</em><span class="sig-paren">)</span><a class="headerlink" href="#alr.ICAL" title="Permalink to this definition">¶</a></dt>
 <dd><p>Implements ‘normal’ <a class="reference external" href="https://arxiv.org/abs/2002.07916">ICAL</a>. <span class="math notranslate nohighlight">\(R\)</span> points
 are randomly drawn from the pool and the average of the candidate batch’s kernels
 is used instead. Thus, the dependency measure reduces to <span class="math notranslate nohighlight">\(d = 2\)</span>.</p>
@@ -341,10 +328,9 @@ is used instead. Thus, the dependency measure reduces to <span class="math notra
 \[\frac{1}{|\mathcal{R}|} d\text{HSIC}(\displaystyle\sum_{x'\in\mathcal{R}} k^{x'},
 \frac{1}{B} \displaystyle\sum_{i = 1}^{B} k^{x_i})\]</div>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">MCDropout</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-<span class="n">ical</span> <span class="o">=</span> <span class="n">ICAL</span><span class="p">(</span><span class="n">model</span><span class="p">,</span>
-            <span class="n">ICAL</span><span class="o">.</span><span class="n">rational_quadratic</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span>
-            <span class="n">r</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span> <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">num_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">ical</span> <span class="o">=</span> <span class="n">ICAL</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span>
+            <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <span class="n">ical</span><span class="p">(</span><span class="n">X_pool</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -353,9 +339,11 @@ is used instead. Thus, the dependency measure reduces to <span class="math notra
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>model</strong> – A <a class="reference internal" href="#alr.MCDropout" title="alr.MCDropout"><code class="xref py py-class docutils literal notranslate"><span class="pre">MCDropout</span></code></a> model is required to calculate
 the <cite>m</cite> different samples of <span class="math notranslate nohighlight">\(p(y | \omega^{(m)})\)</span>.</p></li>
-<li><p><strong>kernel</strong> – Kernel function, see static methods of <a class="reference internal" href="#alr.ICAL" title="alr.ICAL"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICAL</span></code></a></p></li>
-<li><p><strong>r</strong> – Normal ICAL uses a subset of <cite>X_pool</cite>. <cite>r</cite> specifies the
-size of this subset. Use -1 to denote the entire pool.</p></li>
+<li><p><strong>kernel_fn</strong> – Kernel function, see static methods of <a class="reference internal" href="#alr.ICAL" title="alr.ICAL"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICAL</span></code></a></p></li>
+<li><p><strong>subset</strong> – Normal ICAL uses a subset of <cite>X_pool</cite>. <cite>subset</cite> specifies the
+size of this subset (<span class="math notranslate nohighlight">\(|\mathcal{R}|\)</span> in the paper).
+Use -1 to denote the entire pool.</p></li>
+<li><p><strong>greedy_acquire</strong> – how many points to acquire at once in each acquisition step.</p></li>
 <li><p><strong>device</strong> – <cite>torch.device</cite> object.</p></li>
 <li><p><strong>data_loader_params</strong> – params to be passed into <cite>DataLoader</cite> when
 iterating over <cite>X_pool</cite>.</p></li>
@@ -407,7 +395,7 @@ incorrect if the <cite>DataLoader</cite> object shuffles <cite>X_pool</cite>!</p
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># load pre-processed data into tensor objects</span>
 <span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span> <span class="o">=</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">y_test</span> <span class="o">=</span> <span class="n">X_pool</span><span class="p">,</span> <span class="n">y_pool</span> <span class="o">=</span> <span class="o">...</span>
 
-<span class="c1"># create test dataset and create DataLodader object</span>
+<span class="c1"># create test dataset and create DataLoader object</span>
 <span class="n">test_dataset</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">DataLoader</span><span class="p">(</span><span class="n">ALRDataset</span><span class="p">(</span><span class="n">X_test</span><span class="p">,</span> <span class="n">y_test</span><span class="p">),</span>
                                            <span class="n">batch_size</span><span class="o">=</span><span class="mi">2048</span><span class="p">,</span> <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
                                            <span class="n">shuffle</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
@@ -420,7 +408,8 @@ incorrect if the <cite>DataLoader</cite> object shuffles <cite>X_pool</cite>!</p
 <span class="n">afunction</span> <span class="o">=</span> <span class="n">RandomAcquisition</span><span class="p">()</span>
 <span class="n">history</span> <span class="o">=</span> <span class="n">run_experiment</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">afunction</span><span class="p">,</span> <span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">,</span> <span class="n">X_pool</span><span class="p">,</span> <span class="n">y_pool</span><span class="p">,</span>
                          <span class="n">test_dataset</span><span class="p">,</span> <span class="n">optimiser</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">iters</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">init_epochs</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
-                         <span class="n">epochs</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">64</span><span class="p">)</span>
+                         <span class="n">epochs</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
+                         <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="field-list simple">
