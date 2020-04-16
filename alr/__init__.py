@@ -7,6 +7,7 @@ import torch
 import tqdm
 import sys
 import warnings
+import torch.distributions as dist
 
 from abc import ABC, abstractmethod
 from sklearn.model_selection import StratifiedShuffleSplit
@@ -16,15 +17,18 @@ from typing import Dict, List, Optional, Tuple, Any, Union, Callable,\
     Sequence
 
 __version__ = '0.0.0b1'
+_DeviceType = Optional[Union[str, torch.device]]
 
 
 class ALRDataset(torch.utils.data.Dataset):
-    def __init__(self, X, y: Optional[np.array] = None):
+    def __init__(self, X: np.array, y: Optional[np.array] = None):
         """
         Wrapper class to convert numpy arrays into `torch.utils.data.Dataset`
 
         :param X: input features
-        :param y: Optional, targets
+        :type X: `np.array`
+        :param y: Optional targets
+        :type X: `np.array`, optional
         """
         super(ALRDataset, self).__init__()
         self._X = X
@@ -54,7 +58,9 @@ class ALRModel(nn.Module, ABC):
         Regular forward pass. Usually reserved for training.
 
         :param x: input tensor
+        :type x: `torch.Tensor`
         :return: output tensor
+        :rtype: `torch.Tensor`
         """
         pass
 
@@ -66,7 +72,9 @@ class ALRModel(nn.Module, ABC):
         in which case, this function should return multiple stochastic forward passes.
 
         :param x: input tensor
+        :type x: `torch.Tensor`
         :return: output tensor
+        :rtype: `torch.Tensor`
         """
         return self.forward(x)
 
@@ -75,6 +83,7 @@ class ALRModel(nn.Module, ABC):
         Resets the model's weights.
 
         :return: None
+        :rtype: NoneType
         """
         for m, state in self._models:
             # reload initial states
@@ -90,15 +99,27 @@ class ALRModel(nn.Module, ABC):
 class AcquisitionFunction(ABC):
     """
     A base class for all acquisition functions. All subclasses should
-    override the __call__ method.
+    override the `__call__` method.
     """
     @abstractmethod
-    def __call__(self, X_pool: torch.Tensor, b: int) -> Union[np.array, torch.Tensor]:
+    def __call__(self, X_pool: torch.Tensor, b: int) -> np.array:
+        """
+        Given unlabelled data pool `X_pool`, return the best `b`
+        points for labelling by an oracle, where the best points
+        are determined by this acquisition function and its parameters.
+
+        :param X_pool: Unlabelled dataset
+        :type X_pool: `torch.Tensor`
+        :param b: number of points to acquire
+        :type b: int
+        :return: array of indices to `X_pool`.
+        :rtype: `np.array`
+        """
         pass
 
 
 class MCDropout(ALRModel):
-    def __init__(self, model: nn.Module, forward: int = 100):
+    def __init__(self, model: nn.Module, forward: Optional[int] = 100):
         """
         Implements `Monte Carlo Dropout <https://arxiv.org/abs/1506.02142>`_ (MCD). The difference between
         :meth:`forward` and :meth:`predict`
@@ -106,7 +127,9 @@ class MCDropout(ALRModel):
         latter returns the mean of `forward` number of passes (softmax scores).
 
         :param model: base `torch.nn.Module` object
+        :type model: `nn.Module`
         :param forward: number of stochastic forward passes
+        :type forward: int, optional
         """
         super(MCDropout, self).__init__()
         self.base_model = model
@@ -117,12 +140,16 @@ class MCDropout(ALRModel):
         Regular forward pass. Raises exception if `self.training` is `False`.
 
         :param x: input tensor
+        :type x: `torch.Tensor`
         :return: output tensor
+        :rtype: `torch.Tensor`
+        :raises RuntimeError: raises `RuntimeError` if this method is used during evaluation;
+            :meth:`predict` should be used instead.
         """
         if self.training:
             assert self.base_model.training
             return self.base_model(x)
-        raise Exception('Use model.predict(x) during evaluation.')
+        raise RuntimeError('Use model.predict(x) during evaluation.')
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -136,7 +163,9 @@ class MCDropout(ALRModel):
                 return torch.mean(stochastic_forward(x), dim=0)
 
         :param x: input tensor
+        :type x: `torch.Tensor`
         :return: output tensor
+        :rtype: `torch.Tensor`
         """
         return torch.mean(self.stochastic_forward(x), dim=0)
 
@@ -149,7 +178,9 @@ class MCDropout(ALRModel):
             3. :math:`C` is the number of units in the final layer (e.g. number of classes in a classification model)
 
         :param x: input tensor
+        :type x: `torch.Tensor`
         :return: output tensor of shape :math:`m \times N \times C`
+        :rtype: `torch.Tensor`
 
         .. warning::
             It is the *user's own responsibility* to make sure that the model
@@ -166,8 +197,7 @@ class MCDropout(ALRModel):
 
 class DataManager:
     def __init__(self, acquirer: AcquisitionFunction, X_train: torch.Tensor, y_train: torch.Tensor,
-                 X_pool: torch.Tensor, y_pool: torch.Tensor, device: Optional[torch.device] = None,
-                 **data_loader_params):
+                 X_pool: torch.Tensor, y_pool: torch.Tensor, **data_loader_params):
         """
         A stateful data manager class
 
@@ -177,11 +207,15 @@ class DataManager:
         as a :class:`~torch.utils.data.DataLoader` object with the specified `batch_size` in `data_loader_params`.
 
         :param acquirer: acquisition object
+        :type acquirer: :class:`AcquisitionFunction`
         :param X_train: tensor object
+        :type X_train: `torch.Tensor`
         :param y_train: tensor object
+        :type y_train: `torch.Tensor`
         :param X_pool: tensor object
+        :type X_pool: `torch.Tensor`
         :param y_pool: tensor object
-        :param device: torch.device. This will be passed to the acquisition function
+        :type y_pool: `torch.Tensor`
         :param data_loader_params: keyword parameters to be passed into `DataLoader` when calling
             :py:attr:`training_data`
         """
@@ -191,7 +225,6 @@ class DataManager:
         self._y_train = y_train
         self._X_pool = X_pool
         self._y_pool = y_pool
-        self._device = device
         if not data_loader_params:
             self._data_loader_params = dict(shuffle=True, num_workers=2,
                                             pin_memory=True, batch_size=32)
@@ -203,7 +236,9 @@ class DataManager:
         Acquires `b` points from the provided `X_pool` according to `acquirer`.
 
         :param b: number of points to acquire
+        :type b: int
         :return: None
+        :rtype: NoneType
         """
         assert b <= self._X_pool.size(0)
         idxs = self._acquirer(self._X_pool, b)
@@ -220,7 +255,8 @@ class DataManager:
         """
         Returns current training data after being updated by :meth:`acquire`.
 
-        :return: `DataLoader` object
+        :return: A `DataLoader` object than represents the latest updated training pool.
+        :rtype: `DataLoader`
         """
         return torch.utils.data.DataLoader(ALRDataset(self._X_train, self._y_train),
                                            **self._data_loader_params)
@@ -231,12 +267,13 @@ class DataManager:
         Current number of points in `X_train`.
 
         :return: `X_train.size(0)`
+        :rtype: int
         """
         return self._X_train.size(0)
 
 
 def _train(model: nn.Module, dataloader: torch.utils.data.DataLoader, optimiser: torch.optim.Optimizer,
-           epochs: int = 50, device: Optional[torch.device] = None) -> List[float]:
+           epochs: int = 50, device: _DeviceType = None) -> List[float]:
     model.train()
     criterion = nn.CrossEntropyLoss()
     losses = []
@@ -260,7 +297,7 @@ def _train(model: nn.Module, dataloader: torch.utils.data.DataLoader, optimiser:
 
 def _evaluate(model: ALRModel,
               dataloader: torch.utils.data.DataLoader,
-              device: Optional[torch.device] = None) -> float:
+              device: _DeviceType = None) -> float:
     model.eval()
     score = total = 0
     with torch.no_grad():
@@ -274,18 +311,22 @@ def _evaluate(model: ALRModel,
     return score / total
 
 
-def stratified_partition(X_train: np.array, y_train: np.array, train_size: int = 20) ->\
+def stratified_partition(X_train: np.array, y_train: np.array, train_size: Optional[int] = 20) ->\
         Tuple[np.array, np.array, np.array, np.array]:
     """
     Returns (`X_train`, `y_train`, `X_pool`, `y_pool`) where `X_train.size(0) == train_size` and
     `y_train`'s classes are as balanced as possible.
 
-    :param X_train: np.array
-    :param y_train: np.array
+    :param X_train: training input
+    :type X_train: `np.array`
+    :param y_train: training targets
+    :type y_train: `np.array`
     :param train_size: `X_train`'s output size
+    :type train_size: int, optional
     :return: (`X_train`, `y_train`, `X_pool`, `y_pool`) where
              `X_train.size(0) == train_size` and
              `y_train`'s classes are as balanced as possible.
+    :rtype: 4-tuple consisting of `np.array`
     """
     sss = StratifiedShuffleSplit(n_splits=1, train_size=train_size)
     train_idxs, pool_idxs = next(sss.split(X_train, y_train))
@@ -295,52 +336,80 @@ def stratified_partition(X_train: np.array, y_train: np.array, train_size: int =
 
 def run_experiment(model: ALRModel, acquisition_function: AcquisitionFunction, X_train: torch.Tensor,
                    y_train: torch.Tensor, X_pool: torch.Tensor, y_pool: torch.Tensor,
-                   val_data_loader: torch.utils.data.DataLoader, optimiser: torch.optim.Optimizer, b: int = 10,
-                   iters: int = 98, init_epochs: int = 75, epochs: int = 50, device: Optional[torch.device] = None,
-                   pin_memory: bool = True, num_workers: int = 2, batch_size: int = 32) -> Dict[(int, float)]:
+                   val_data_loader: torch.utils.data.DataLoader, optimiser: torch.optim.Optimizer,
+                   b: Optional[int] = 10, iters: Optional[int] = 20,
+                   init_epochs: Optional[int] = 75, epochs: Optional[int] = 50,
+                   device: _DeviceType = None, pin_memory: Optional[bool] = True,
+                   num_workers: Optional[int] = 2, batch_size: Optional[int] = 32) -> Dict[(int, float)]:
     r"""
     A helper function useful for running a simple train-evaluate-acquire active learning loop.
+
+    :param model: an :class:`ALRModel` object
+    :type model: :class:`ALRModel`
+    :param acquisition_function: an :class:`AcquisitionFunction` object
+    :type acquisition_function: :class:`AcquisitionFunction`
+    :param X_train: A tensor with shape :math:`N \times C \times H \times W`
+    :type X_train: `torch.Tensor`
+    :param y_train: A tensor with shape :math:`N`
+    :type y_train: `torch.Tensor`
+    :param X_pool: A tensor with shape :math:`N' \times C \times H \times W`
+    :type X_pool: `torch.Tensor`
+    :param y_pool: A tensor with shape :math:`N'`
+    :type y_pool: `torch.Tensor`
+    :param val_data_loader: data loader used to calculate test/validation loss/acc
+    :type val_data_loader: `torch.utils.data.DataLoader`
+    :param optimiser: PyTorch optimiser object
+    :type optimiser: `torch.optim.Optimiser`
+    :param b: number of samples to acquire in each iteration
+    :type b: int, optional
+    :param iters: number of iterations to repeat acquisition from X_pool
+    :type iters: int, optional
+    :param init_epochs: number of initial epochs to train
+    :type init_epochs: int, optional
+    :param epochs: number of epochs for each subsequent training iterations
+    :type epochs: int, optional
+    :param device: Device object. Used for training and evaluation.
+    :type device: `None`, `str`, `torch.device`, optional
+    :param pin_memory: `pin_memory` argument passed to `DataLoader` object when training model
+    :type pin_memory: bool, optional
+    :param num_workers: `num_workers` argument passed to `DataLoader` object when training model
+    :type num_workers: int, optional
+    :param batch_size: `batch_size` argument passed to `DataLoader` object when training model
+    :type batch_size: int, optional
+    :return: a mapping of training pool size to accuracy.
+    :rtype: `dict`
 
     :Example:
 
     .. code:: python
 
-        # load pre-processed data into tensor objects
-        X_train, y_train = X_test, y_test = X_pool, y_pool = ...
+        # load training data
+        X_train, y_train = np.random.normal(0, 1, size=(100, 10)), np.random.randint(0, 5, size=(100,))
+        X_test, y_test = np.random.normal(0, 1, size=(10, 10)), np.random.randint(0, 5, size=(10,))
 
-        # create test dataset and create DataLoader object
+        # partition data using stratified_partition
+        X_train, y_train, X_pool, y_pool = stratified_partition(X_train, y_train, train_size=20)
+
+        # create test DataLoader object
         test_dataset = torch.utils.data.DataLoader(ALRDataset(X_test, y_test),
                                                    batch_size=2048, pin_memory=True,
                                                    shuffle=False, num_workers=2)
+
         # instantiate model and optimiser.
-        model = MCDropout(Net()).to(device)
+        class Net(nn.Module):
+            pass
+        model = MCDropout(Net()).to('cpu')
         optimiser = torch.optim.Adam(model.parameters())
+
         # optional
         model.reset_weights()
 
         afunction = RandomAcquisition()
         history = run_experiment(model, afunction, X_train, y_train, X_pool, y_pool,
                                  test_dataset, optimiser, b=30, iters=10, init_epochs=100,
-                                 epochs=100, device=device, batch_size=64,
+                                 epochs=100, device='cpu', batch_size=64,
                                  pin_memory=True, num_workers=2)
 
-    :param model: an :class:`ALRModel` object
-    :param acquisition_function: an :class:`AcquisitionFunction` object
-    :param X_train: A tensor with shape :math:`N \times C \times H \times W`
-    :param y_train: A tensor with shape :math:`N`
-    :param X_pool: A tensor with shape :math:`N' \times C \times H \times W`
-    :param y_pool: A tensor with shape :math:`N'`
-    :param val_data_loader: data loader used to calculate test/validation loss/acc
-    :param optimiser: PyTorch optimiser object
-    :param b: number of samples to acquire in each iteration
-    :param iters: number of iterations to repeat acquisition from X_pool
-    :param init_epochs: number of initial epochs to train
-    :param epochs: number of epochs for each subsequent training iterations
-    :param device: torch.device
-    :param pin_memory: `pin_memory` argument passed to `DataLoader` object when training model
-    :param num_workers: `num_workers` argument passed to `DataLoader` object when training model
-    :param batch_size: `batch_size` argument passed to `DataLoader` object when training model
-    :return: a dictionary of # training points to accuracy
     """
     assert X_train.dim() == X_pool.dim() == 4
     assert y_train.size(0) == X_train.size(0)
@@ -381,7 +450,7 @@ class RandomAcquisition(AcquisitionFunction):
 class BALD(AcquisitionFunction):
     def __init__(self, model: MCDropout,
                  subset: Optional[int] = -1,
-                 device: Optional[torch.device] = None,
+                 device: _DeviceType = None,
                  **data_loader_params):
         r"""
         Implements `BALD <https://arxiv.org/abs/1112.5745>`_.
@@ -408,8 +477,11 @@ class BALD(AcquisitionFunction):
 
         :param model: A :class:`MCDropout` model is required to calculate
                       the `m` different samples of :math:`p(y | \omega^{(m)})`.
+        :type model: :class:`MCDropout`
         :param subset: Size of the subset of `X_pool`. Use -1 to denote the entire pool.
-        :param device: `torch.device` object.
+        :type subset: int, optional
+        :param device: Device object used when making forward passes with the model.
+        :type device: `None`, `str`, `torch.device`
         :param data_loader_params: params to be passed into `DataLoader` when
                                    iterating over `X_pool`.
 
@@ -455,7 +527,9 @@ class ICAL(AcquisitionFunction):
                  kernel_fn: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
                  subset: Optional[int] = 200,
                  greedy_acquire: Optional[int] = 1,
-                 device: Optional[torch.device] = None,
+                 use_one_hot: Optional[bool] = True,
+                 sample_softmax: Optional[bool] = True,
+                 device: _DeviceType = None,
                  **data_loader_params):
         r"""
         Implements 'normal' `ICAL <https://arxiv.org/abs/2002.07916>`_. :math:`R` points
@@ -477,12 +551,25 @@ class ICAL(AcquisitionFunction):
 
         :param model: A :class:`MCDropout` model is required to calculate
                       the `m` different samples of :math:`p(y | \omega^{(m)})`.
-        :param kernel_fn: Kernel function, see static methods of :class:`ICAL`
+        :type model: :class:`MCDropout`
+        :param kernel_fn: Kernel function, see static methods of :class:`ICAL`. Defaults to
+            weighted a rational quadratic kernel. This is the default kernel in the paper.
+        :type kernel_fn: Callable[[torch.Tensor]. torch.Tensor]], optional
         :param subset: Normal ICAL uses a subset of `X_pool`. `subset` specifies the
                   size of this subset (:math:`|\mathcal{R}|` in the paper).
                   Use -1 to denote the entire pool.
+        :type subset: int
         :param greedy_acquire: how many points to acquire at once in each acquisition step.
-        :param device: `torch.device` object.
+        :type greedy_acquire: int
+        :param use_one_hot: use one_hot_encoding when calculating kernel matrix. This is the
+            default behaviour in the paper.
+        :type use_one_hot: bool
+        :param sample_softmax: sample the softmax probabilities. If this is `True`, then
+            `use_one_hot` is automatically overriden to be `True`. This is the default
+            behaviour in the paper.
+        :type sample_softmax: bool
+        :param device: Device object. Used when making forward passes with the model.
+        :type device: `None`, `str`, `torch.device`
         :param data_loader_params: params to be passed into `DataLoader` when
                                    iterating over `X_pool`.
 
@@ -495,6 +582,8 @@ class ICAL(AcquisitionFunction):
         self._dl_params = data_loader_params
         self._device = device
         self._l = greedy_acquire
+        self._use_oh = True if sample_softmax else use_one_hot
+        self._sample_softmax = sample_softmax
         if kernel_fn is None:
             self._kernel = ICAL.rational_quadratic()
         else:
@@ -512,9 +601,24 @@ class ICAL(AcquisitionFunction):
             mc_preds = torch.cat([
                 model.stochastic_forward(x.to(self._device) if self._device else x) for x in dl
             ], dim=1)
-            assert mc_preds.size()[:-1] == (model.n_forward, pool_size)
-        # TODO: convert mc_preds to one-hot-encoding?
-        kernel_matrices = self._kernel(mc_preds.detach_())
+        mc_preds = mc_preds.detach_()
+        assert mc_preds.size()[:-1] == (model.n_forward, pool_size)
+        # num classes
+        C = mc_preds.size(-1)
+        if self._sample_softmax:
+            assert self._use_oh
+            cat_dist = dist.categorical.Categorical(mc_preds.view(model.n_forward * pool_size, -1))
+            # mc_preds is now a vector of sampled class idx
+            mc_preds = cat_dist.sample([1])[0]
+            assert mc_preds.size() == (model.n_forward * pool_size,)
+        if self._use_oh:
+            if not self._sample_softmax:
+                mc_preds = mc_preds.view(model.n_forward * pool_size, -1).argmax(dim=-1)
+            assert mc_preds.size() == (model.n_forward * pool_size,)
+            mc_preds = (torch.eye(C)[mc_preds]                      # shape [N * B x C]
+                             .view(model.n_forward, pool_size, C))  # shape [N x B x C]
+        assert mc_preds.size() == (model.n_forward, pool_size, C)
+        kernel_matrices = self._kernel(mc_preds)
         assert kernel_matrices.size() == (model.n_forward, model.n_forward, pool_size)
         # [Pool_size x N x N]
         kernel_matrices = kernel_matrices.permute(2, 0, 1)

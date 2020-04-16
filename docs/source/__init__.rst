@@ -18,6 +18,7 @@ Classses
     :members:
     :undoc-members:
     :show-inheritance:
+    
 
 
 :hidden:`ALRModel`
@@ -27,6 +28,7 @@ Classses
     :members:
     :undoc-members:
     :show-inheritance:
+    
 
 
 :hidden:`AcquisitionFunction`
@@ -36,6 +38,7 @@ Classses
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members: __call__
 
 
 :hidden:`MCDropout`
@@ -45,6 +48,7 @@ Classses
     :members:
     :undoc-members:
     :show-inheritance:
+    
 
 
 :hidden:`DataManager`
@@ -54,6 +58,7 @@ Classses
     :members:
     :undoc-members:
     :show-inheritance:
+    
 
 
 :hidden:`RandomAcquisition`
@@ -63,6 +68,7 @@ Classses
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members: __call__
 
 
 :hidden:`BALD`
@@ -72,6 +78,7 @@ Classses
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members: __call__
 
 
 :hidden:`ICAL`
@@ -81,6 +88,7 @@ Classses
     :members:
     :undoc-members:
     :show-inheritance:
+    :special-members: __call__
 
 
 
