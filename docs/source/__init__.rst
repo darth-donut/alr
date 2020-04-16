@@ -16,6 +16,8 @@ Classses
 
 .. autoclass:: ALRDataset
     :members:
+    :undoc-members:
+    :show-inheritance:
 
 
 :hidden:`ALRModel`
@@ -23,6 +25,8 @@ Classses
 
 .. autoclass:: ALRModel
     :members:
+    :undoc-members:
+    :show-inheritance:
 
 
 :hidden:`AcquisitionFunction`
@@ -30,6 +34,8 @@ Classses
 
 .. autoclass:: AcquisitionFunction
     :members:
+    :undoc-members:
+    :show-inheritance:
 
 
 :hidden:`MCDropout`
@@ -37,6 +43,8 @@ Classses
 
 .. autoclass:: MCDropout
     :members:
+    :undoc-members:
+    :show-inheritance:
 
 
 :hidden:`DataManager`
@@ -44,6 +52,8 @@ Classses
 
 .. autoclass:: DataManager
     :members:
+    :undoc-members:
+    :show-inheritance:
 
 
 :hidden:`RandomAcquisition`
@@ -51,6 +61,8 @@ Classses
 
 .. autoclass:: RandomAcquisition
     :members:
+    :undoc-members:
+    :show-inheritance:
 
 
 :hidden:`BALD`
@@ -58,6 +70,8 @@ Classses
 
 .. autoclass:: BALD
     :members:
+    :undoc-members:
+    :show-inheritance:
 
 
 :hidden:`ICAL`
@@ -65,6 +79,8 @@ Classses
 
 .. autoclass:: ICAL
     :members:
+    :undoc-members:
+    :show-inheritance:
 
 
 

@@ -301,7 +301,7 @@ def run_experiment(model: ALRModel, acquisition_function: AcquisitionFunction, X
     r"""
     A helper function useful for running a simple train-evaluate-acquire active learning loop.
 
-    Example:
+    :Example:
 
     .. code:: python
 

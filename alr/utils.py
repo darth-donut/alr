@@ -47,7 +47,7 @@ def time_this(func: Callable):
         assert x == 42 and elapsed.seconds >= 0
 
     :param func: any function
-    :return: (func(*args, **kwargs), elapsed_time) tuple
+    :return: 2-tuple of (result, elapsed time)
     """
     @wraps(func)
     def dec(*args, **kwargs):

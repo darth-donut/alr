@@ -16,6 +16,7 @@ Python API
    :caption: Python API
 
    __init__
+   utils
 
 Indices and tables
 ==================
