@@ -337,7 +337,7 @@ def stratified_partition(X_train: np.array, y_train: np.array, train_size: Optio
 def run_experiment(model: ALRModel, acquisition_function: AcquisitionFunction, X_train: torch.Tensor,
                    y_train: torch.Tensor, X_pool: torch.Tensor, y_pool: torch.Tensor,
                    val_data_loader: torch.utils.data.DataLoader, optimiser: torch.optim.Optimizer,
-                   b: Optional[int] = 10, iters: Optional[int] = 20,
+                   *, b: Optional[int] = 10, iters: Optional[int] = 20,
                    init_epochs: Optional[int] = 75, epochs: Optional[int] = 50,
                    device: _DeviceType = None, pin_memory: Optional[bool] = True,
                    num_workers: Optional[int] = 2, batch_size: Optional[int] = 32) -> Dict[(int, float)]:
