@@ -12,7 +12,6 @@
 #
 import os
 import sys
-# ALR_ROOT = os.path.abspath(os.path.join('..', '..', 'alr'))
 ALR_ROOT = os.path.abspath(os.path.join('..', '..'))
 sys.path.insert(0, ALR_ROOT)
 
@@ -70,3 +69,5 @@ html_static_path = ['_static']
 
 # ADDED: show init docstring in class documentation
 autoclass_content = 'both'
+# ADDED: for rtd.io
+master_doc = 'index'
