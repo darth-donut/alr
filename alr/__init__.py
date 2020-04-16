@@ -16,7 +16,7 @@ from torch.nn import functional as F
 from typing import Dict, List, Optional, Tuple, Any, Union, Callable,\
     Sequence
 
-__version__ = '0.0.0b1'
+__version__ = '0.0.0b2'
 _DeviceType = Optional[Union[str, torch.device]]
 
 
