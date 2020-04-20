@@ -8,6 +8,7 @@ import tqdm
 import sys
 import warnings
 import torch.distributions as dist
+import torch.utils.data as torchdata
 
 from abc import ABC, abstractmethod
 from sklearn.model_selection import StratifiedShuffleSplit
@@ -18,29 +19,6 @@ from typing import Dict, List, Optional, Tuple, Any, Union, Callable,\
 
 __version__ = '0.0.0b2'
 _DeviceType = Optional[Union[str, torch.device]]
-
-
-class ALRDataset(torch.utils.data.Dataset):
-    def __init__(self, X: np.array, y: Optional[np.array] = None):
-        """
-        Wrapper class to convert numpy arrays into `torch.utils.data.Dataset`
-
-        :param X: input features
-        :type X: `np.array`
-        :param y: Optional targets
-        :type X: `np.array`, optional
-        """
-        super(ALRDataset, self).__init__()
-        self._X = X
-        self._y = y
-
-    def __getitem__(self, i: int) -> Union[Any, Tuple[Any, Any]]:
-        if self._y is not None:
-            return self._X[i], self._y[i]
-        return self._X[i]
-
-    def __len__(self) -> int:
-        return self._X.shape[0]
 
 
 class ALRModel(nn.Module, ABC):
@@ -258,7 +236,7 @@ class DataManager:
         :return: A `DataLoader` object than represents the latest updated training pool.
         :rtype: `DataLoader`
         """
-        return torch.utils.data.DataLoader(ALRDataset(self._X_train, self._y_train),
+        return torch.utils.data.DataLoader(torchdata.TensorDataset(self._X_train, self._y_train),
                                            **self._data_loader_params)
 
     @property
@@ -391,7 +369,7 @@ def run_experiment(model: ALRModel, acquisition_function: AcquisitionFunction, X
         X_train, y_train, X_pool, y_pool = stratified_partition(X_train, y_train, train_size=20)
 
         # create test DataLoader object
-        test_dataset = torch.utils.data.DataLoader(ALRDataset(X_test, y_test),
+        test_dataset = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(X_test, y_test),
                                                    batch_size=2048, pin_memory=True,
                                                    shuffle=False, num_workers=2)
 
@@ -505,7 +483,7 @@ class BALD(AcquisitionFunction):
             if b == r: return idxs
             idxs = np.random.choice(pool_size, r, replace=False)
             X_pool = X_pool[idxs]
-        dl = torch.utils.data.DataLoader(ALRDataset(X_pool), **self._dl_params)
+        dl = torch.utils.data.DataLoader(torchdata.TensorDataset(X_pool), **self._dl_params)
         with torch.no_grad():
             mc_preds = torch.cat(
                 [mcmodel.stochastic_forward(x.to(self._device) if self._device else x)
@@ -596,7 +574,7 @@ class ICAL(AcquisitionFunction):
         l = self._l
         pool_size = X_pool.size(0)
         r = self._r if self._r != -1 else pool_size
-        dl = torch.utils.data.DataLoader(ALRDataset(X_pool), **self._dl_params)
+        dl = torch.utils.data.DataLoader(torchdata.TensorDataset(X_pool), **self._dl_params)
         with torch.no_grad():
             mc_preds = torch.cat([
                 model.stochastic_forward(x.to(self._device) if self._device else x) for x in dl

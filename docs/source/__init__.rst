@@ -11,16 +11,6 @@ Classses
 ---------
 
 
-:hidden:`ALRDataset`
-~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: ALRDataset
-    :members:
-    :undoc-members:
-    :show-inheritance:
-    
-
-
 :hidden:`ALRModel`
 ~~~~~~~~~~~~~~~~~~
 
