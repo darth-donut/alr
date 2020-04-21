@@ -219,3 +219,4 @@ ipython_config.py
 
 
 todo.txt
+docs/**/*.ipynb

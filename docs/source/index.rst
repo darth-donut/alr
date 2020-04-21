@@ -13,11 +13,23 @@ Python API
 
 .. toctree::
    :maxdepth: 1
-   :caption: Python API
+   :caption: alr API
 
    __init__
    utils
+   acquisition
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Supported dropout modules
+
    dropout
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Examples
+
+   Quick-start guide <experiments/quickstart.ipynb>
 
 Indices and tables
 ==================

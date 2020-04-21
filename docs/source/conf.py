@@ -12,7 +12,10 @@
 #
 import os
 import sys
+import shutil
+
 ALR_ROOT = os.path.abspath(os.path.join('..', '..'))
+EXPERIMENT_DIR = os.path.join(ALR_ROOT, 'experiments')
 sys.path.insert(0, ALR_ROOT)
 
 # -- Project information -----------------------------------------------------
@@ -43,7 +46,8 @@ release = get_version(os.path.join(ALR_ROOT, "alr", "__init__.py"))
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.intersphinx',
-    'sphinx.ext.viewcode'
+    'sphinx.ext.viewcode',
+    'nbsphinx'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -67,7 +71,11 @@ html_theme = 'sphinx_rtd_theme'
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
+# -- User added content ------------------------------------------------------
 # ADDED: show init docstring in class documentation
 autoclass_content = 'both'
 # ADDED: for rtd.io
 master_doc = 'index'
+# ADDED: import experiments from ../../experiments
+shutil.rmtree('experiments', ignore_errors=True)
+shutil.copytree(EXPERIMENT_DIR, 'experiments')
