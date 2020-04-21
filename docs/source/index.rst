@@ -17,6 +17,7 @@ Python API
 
    __init__
    utils
+   dropout
 
 Indices and tables
 ==================

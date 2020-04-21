@@ -21,16 +21,6 @@ Classses
     
 
 
-:hidden:`AcquisitionFunction`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: AcquisitionFunction
-    :members:
-    :undoc-members:
-    :show-inheritance:
-    :special-members: __call__
-
-
 :hidden:`MCDropout`
 ~~~~~~~~~~~~~~~~~~~
 
@@ -49,36 +39,6 @@ Classses
     :undoc-members:
     :show-inheritance:
     
-
-
-:hidden:`RandomAcquisition`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: RandomAcquisition
-    :members:
-    :undoc-members:
-    :show-inheritance:
-    :special-members: __call__
-
-
-:hidden:`BALD`
-~~~~~~~~~~~~~~
-
-.. autoclass:: BALD
-    :members:
-    :undoc-members:
-    :show-inheritance:
-    :special-members: __call__
-
-
-:hidden:`ICAL`
-~~~~~~~~~~~~~~
-
-.. autoclass:: ICAL
-    :members:
-    :undoc-members:
-    :show-inheritance:
-    :special-members: __call__
 
 
 

@@ -1,9 +1,13 @@
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import wraps
-from typing import Optional, Callable
-from contextlib import contextmanager
 from timeit import default_timer
+from typing import Optional, Callable, Union
 
+import torch
+
+# type aliases
+_DeviceType = Optional[Union[str, torch.device]]
 
 @contextmanager
 def timeop():
