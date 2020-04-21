@@ -162,7 +162,7 @@ def replace_dropout(module: torch.nn.Module,
     :param module: PyTorch module object
     :type module: `torch.nn.Module`
     :param clone: If `True`, then a new module is returned and the old one is untouched.
-    :type clone: `bool`
+    :type clone: `bool`, optional
     :return: Same `module` instance if `clone` is `False`, else a brand new module.
     :rtype: `torch.nn.Module`
     """
