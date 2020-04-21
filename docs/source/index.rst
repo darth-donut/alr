@@ -13,11 +13,11 @@ Python API
 
 .. toctree::
    :maxdepth: 1
-   :caption: alr API
+   :caption: alr
 
-   __init__
+   Active learning toolbox <__init__>
+   Acquisition functions <acquisition>
    utils
-   acquisition
 
 .. toctree::
    :maxdepth: 1

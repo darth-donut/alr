@@ -141,12 +141,6 @@ class MCDropout(ALRModel):
         :type x: `torch.Tensor`
         :return: output tensor of shape :math:`m \times N \times C`
         :rtype: `torch.Tensor`
-
-        .. warning::
-            It is the *user's own responsibility* to make sure that the model
-            is in training mode. For example, unless dropout is hard-coded
-            to always drop units in the base model, stochastic_forward will
-            not have any stochasticity!
         """
         preds = torch.stack(
             [F.softmax(self.base_model(x), dim=1) for _ in range(self.n_forward)]
