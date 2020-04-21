@@ -104,7 +104,7 @@ class BALD(AcquisitionFunction):
         dl = torch.utils.data.DataLoader(torchdata.TensorDataset(X_pool), **self._dl_params)
         with torch.no_grad():
             mc_preds = torch.cat(
-                [self._pred_fn(x.to(self._device) if self._device else x) for (x) in dl],
+                [self._pred_fn(x.to(self._device) if self._device else x) for (x,) in dl],
                 dim=1
             )
             assert mc_preds.size()[1] == pool_size
@@ -195,7 +195,7 @@ class ICAL(AcquisitionFunction):
         dl = torch.utils.data.DataLoader(torchdata.TensorDataset(X_pool), **self._dl_params)
         with torch.no_grad():
             mc_preds = torch.cat([
-                self._pred_fn(x.to(self._device) if self._device else x) for (x) in dl
+                self._pred_fn(x.to(self._device) if self._device else x) for (x,) in dl
             ], dim=1)
         mc_preds = mc_preds.detach_()
         n_forward, pool_size, C = mc_preds.size()
