@@ -28,3 +28,9 @@ Functions
 .. autofunction:: time_this
 
 
+:hidden:`stratified_partition`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: stratified_partition
+
+

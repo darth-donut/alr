@@ -31,30 +31,8 @@ Classses
     
 
 
-:hidden:`DataManager`
-~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: DataManager
-    :members:
-    :undoc-members:
-    :show-inheritance:
-    
-
-
 
 Functions
 ---------
-
-
-:hidden:`stratified_partition`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autofunction:: stratified_partition
-
-
-:hidden:`run_experiment`
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autofunction:: run_experiment
 
 

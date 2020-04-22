@@ -18,14 +18,14 @@ class AcquisitionFunction(ABC):
     override the `__call__` method.
     """
     @abstractmethod
-    def __call__(self, X_pool: torch.Tensor, b: int) -> np.array:
+    def __call__(self, X_pool: torchdata.Dataset, b: int) -> np.array:
         """
         Given unlabelled data pool `X_pool`, return the best `b`
         points for labelling by an oracle, where the best points
         are determined by this acquisition function and its parameters.
 
         :param X_pool: Unlabelled dataset
-        :type X_pool: `torch.Tensor`
+        :type X_pool: `torch.utils.data.Dataset`
         :param b: number of points to acquire
         :type b: int
         :return: array of indices to `X_pool`.
@@ -38,8 +38,8 @@ class RandomAcquisition(AcquisitionFunction):
     """
     Implements random acquisition. Uniformly sample `b` indices.
     """
-    def __call__(self, X_pool: torch.Tensor, b: int) -> np.array:
-        return np.random.choice((X_pool.size(0)), b, replace=False)
+    def __call__(self, X_pool: torchdata.Dataset, b: int) -> np.array:
+        return np.random.choice(len(X_pool), b, replace=False)
 
 
 class BALD(AcquisitionFunction):
@@ -92,19 +92,19 @@ class BALD(AcquisitionFunction):
         self._dl_params = data_loader_params
         assert not self._dl_params.get('shuffle', False)
 
-    def __call__(self, X_pool: torch.Tensor, b: int) -> np.array:
-        pool_size = X_pool.size(0)
+    def __call__(self, X_pool: torchdata.Dataset, b: int) -> np.array:
+        pool_size = len(X_pool)
         idxs = np.arange(pool_size)
         if self._subset != -1:
             r = min(self._subset, pool_size)
             assert b <= r, "Can't acquire more points that pool size"
             if b == r: return idxs
             idxs = np.random.choice(pool_size, r, replace=False)
-            X_pool = X_pool[idxs]
-        dl = torch.utils.data.DataLoader(torchdata.TensorDataset(X_pool), **self._dl_params)
+            X_pool = torchdata.Subset(X_pool, idxs)
+        dl = torchdata.DataLoader(X_pool, **self._dl_params)
         with torch.no_grad():
             mc_preds = torch.cat(
-                [self._pred_fn(x.to(self._device) if self._device else x) for (x,) in dl],
+                [self._pred_fn(x.to(self._device) if self._device else x) for x in dl],
                 dim=1
             )
             assert mc_preds.size()[1] == pool_size
@@ -188,14 +188,14 @@ class ICAL(AcquisitionFunction):
         assert not self._dl_params.get('shuffle', False)
         assert subset != 0
 
-    def __call__(self, X_pool: torch.Tensor, b: int) -> np.array:
+    def __call__(self, X_pool: torchdata.Dataset, b: int) -> np.array:
         l = self._l
-        pool_size = X_pool.size(0)
+        pool_size = len(X_pool)
         r = self._r if self._r != -1 else pool_size
-        dl = torch.utils.data.DataLoader(torchdata.TensorDataset(X_pool), **self._dl_params)
+        dl = torchdata.DataLoader(X_pool, **self._dl_params)
         with torch.no_grad():
             mc_preds = torch.cat([
-                self._pred_fn(x.to(self._device) if self._device else x) for (x,) in dl
+                self._pred_fn(x.to(self._device) if self._device else x) for x in dl
             ], dim=1)
         mc_preds = mc_preds.detach_()
         n_forward, pool_size, C = mc_preds.size()

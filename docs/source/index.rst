@@ -13,11 +13,18 @@ Python API
 
 .. toctree::
    :maxdepth: 1
+   :caption: Examples
+
+   Quick-start <experiments/quickstart.ipynb>
+
+.. toctree::
+   :maxdepth: 1
    :caption: alr
 
    Active learning toolbox <__init__>
    Acquisition functions <acquisition>
    utils
+   data
 
 .. toctree::
    :maxdepth: 1
@@ -25,11 +32,6 @@ Python API
 
    dropout
 
-.. toctree::
-   :maxdepth: 1
-   :caption: Examples
-
-   Quick-start guide <experiments/quickstart.ipynb>
 
 Indices and tables
 ==================
