@@ -175,10 +175,9 @@ def replace_dropout(module: torch.nn.Module,
 
     :param module: PyTorch module object
     :type module: `torch.nn.Module`
-    :param clone: If `True`, then a new module is returned and the old one is untouched.
-    :param clone: If `False`, the `model` is modified *in-place* such that the
-                    dropout layers are replaced with :mod:`~alr.modules.dropout` layers.
-                    If `True`, `model` is not modified and a new model is cloned.
+    :param clone: If `False`, the `model` is modified *in-place*. If `True`,
+                 `model` is not modified and a new model is cloned.
+    :type clone: `bool`, optional
     :return: Same `module` instance if `clone` is `False`, else a brand new module.
     :rtype: `torch.nn.Module`
     """

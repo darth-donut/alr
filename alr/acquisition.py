@@ -151,20 +151,20 @@ class ICAL(AcquisitionFunction):
         :type pred_fn: `Callable`
         :param kernel_fn: Kernel function, see static methods of :class:`ICAL`. Defaults to
             weighted a rational quadratic kernel. This is the default kernel in the paper.
-        :type kernel_fn: Callable[[torch.Tensor]. torch.Tensor]], optional
+        :type kernel_fn: Callable[[torch.Tensor], torch.Tensor]], optional
         :param subset: Normal ICAL uses a subset of `X_pool`. `subset` specifies the
                   size of this subset (:math:`|\mathcal{R}|` in the paper).
                   Use -1 to denote the entire pool.
-        :type subset: int
+        :type subset: int, optional
         :param greedy_acquire: how many points to acquire at once in each acquisition step.
-        :type greedy_acquire: int
+        :type greedy_acquire: int, optional
         :param use_one_hot: use one_hot_encoding when calculating kernel matrix. This is the
             default behaviour in the paper.
-        :type use_one_hot: bool
+        :type use_one_hot: bool, optional
         :param sample_softmax: sample the softmax probabilities. If this is `True`, then
             `use_one_hot` is automatically overriden to be `True`. This is the default
             behaviour in the paper.
-        :type sample_softmax: bool
+        :type sample_softmax: bool, optional
         :param device: Move data to specified device when passing input data into `pred_fn`.
         :type device: `None`, `str`, `torch.device`
         :param data_loader_params: params to be passed into `DataLoader` when
