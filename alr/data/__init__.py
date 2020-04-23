@@ -28,6 +28,7 @@ class UnlabelledDataset(torchdata.Dataset):
         self._label_fn = label_fn
         self._mask = torch.ones(len(dataset), dtype=torch.bool)
         self._len = len(dataset)
+        self._idx_mask = torch.arange(len(dataset))
 
     def label(self, idxs: Sequence[int]) -> torchdata.Dataset:
         r"""
@@ -41,7 +42,7 @@ class UnlabelledDataset(torchdata.Dataset):
         :rtype: :class:`torch.utils.data.Dataset`
         """
         # indices of data where it hasn't been labelled yet
-        local_mask = torch.nonzero(self._mask).flatten()
+        local_mask = self._idx_mask
 
         # can't acquire something that's not in the pool anymore
         assert self._mask[local_mask[idxs]].all(), "Can't label points that have been labelled."
@@ -49,16 +50,20 @@ class UnlabelledDataset(torchdata.Dataset):
         labelled = torchdata.Subset(self._dataset, local_mask[idxs])
         if self._label_fn:
             labelled = self._label_fn(labelled)
+
+        # update masks and length
         self._mask[local_mask[idxs]] = 0
+        self._idx_mask = torch.nonzero(self._mask).flatten()
         self._len -= len(idxs)
         return labelled
 
     def __getitem__(self, idx) -> torch.Tensor:
+        # indices of data where it hasn't been labelled yet
         if self._label_fn:
             # user provided x only
-            return self._dataset[self._mask][idx]
+            return self._dataset[self._idx_mask[idx].item()]
         # user provided (x, y) => return x only
-        return self._dataset[self._mask][0][idx]
+        return self._dataset[self._idx_mask[idx].item()][0]
 
     def __len__(self) -> int:
         return self._len
@@ -82,6 +87,7 @@ class UnlabelledDataset(torchdata.Dataset):
         :rtype: NoneType
         """
         self._mask = torch.ones(len(self._dataset), dtype=torch.bool)
+        self._idx_mask = torch.arange(len(self._dataset))
         self._len = len(self._dataset)
 
 
