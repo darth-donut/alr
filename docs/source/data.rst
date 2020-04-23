@@ -11,8 +11,8 @@ Classses
 ---------
 
 
-:hidden:`UnlabelledData`
-~~~~~~~~~~~~~~~~~~~~~~~~
+:hidden:`UnlabelledDataset`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: UnlabelledDataset
     :members:
