@@ -13,7 +13,7 @@ from alr.acquisition import AcquisitionFunction
 from alr.modules.dropout import replace_dropout
 from alr.utils import _DeviceType
 
-__version__ = '0.0.0b3'
+__version__ = '0.0.0b4'
 
 
 class ALRModel(nn.Module, ABC):
