@@ -26,8 +26,9 @@ __version__ = '0.0.0b5'
 class FitResult:
     r"""
     A result object returned by :class:`ALRModel`'s :meth:`~ALRModel.fit` method.
+    Each array has length equal to number of epochs.
     """
-    train_loss: np.ndarray
+    train_loss: Union[np.ndarray, float]
     train_acc: Union[np.ndarray, float, None] = None
     val_loss: Union[np.ndarray, float, None] = None
     val_acc: Union[np.ndarray, float, None] = None
@@ -36,20 +37,28 @@ class FitResult:
         r"""
         Reduces the results according to `op`.
 
-        :param op: reduction operation
+        :param op: reduction operation. Any one of numpy's array reduction operation with
+                    a signature `op(<array>)`. Two additional supported operations are
+                    `"first"` and `"last"`
         :type op: str
         :param inplace: whether to perform operation in-place
         :type inplace: bool
         :return: a copy of itself if inplace is True, else itself
         :rtype: :class:`FitResult`
-        :raises ValueError: if numpy does not support this operation. I.e. `np.<op>` does not exist.
+        :raises ValueError: if numpy does not support this operation
+                             (i.e. `np.<op>` does not exist) or not one of `"first"` or `"last"`
         """
-        if not hasattr(np, op):
-            raise ValueError(f"Numpy does not support {op} operation.")
+        op = op.lower().strip()
+        if not hasattr(np, op) and op not in {"first", "last"}:
+            raise ValueError(f"ALRModel.reduce does not support {op} operation.")
         result = self if inplace else copy.deepcopy(self)
+        if op in {"first", "last"}:
+            func = lambda x: x[0 if op == "first" else -1]  # noqa
+        else:
+            func = getattr(np, op)
         for attr, v in result.__dict__.items():
             if v is not None:
-                setattr(result, attr, getattr(np, op)(v))
+                setattr(result, attr, func(v))
         return result
 
 
