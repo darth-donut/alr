@@ -3,11 +3,18 @@ Main alr module
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Callable, Tuple, Union
+from dataclasses import dataclass
 
+import numpy as np
 import torch
+import sys
+import tqdm
+import copy
 from torch import nn
 from torch.nn import functional as F
+from collections import namedtuple
+import torch.utils.data as torchdata
 
 from alr.acquisition import AcquisitionFunction
 from alr.modules.dropout import replace_dropout
@@ -16,7 +23,38 @@ from alr.utils import _DeviceType
 __version__ = '0.0.0b4'
 
 
+@dataclass
+class FitResult:
+    train_loss: np.ndarray
+    train_acc: Union[np.ndarray, float, None] = None
+    val_loss: Union[np.ndarray, float, None] = None
+    val_acc: Union[np.ndarray, float, None] = None
+
+    def reduce(self, op: str, inplace: Optional[bool] = False) -> 'FitResult':
+        r"""
+        Reduces the results according to `op`.
+
+        :param op: reduction operation
+        :type op: str
+        :param inplace: whether to perform operation in-place
+        :type inplace: bool
+        :return: a copy of itself if inplace is True, else itself
+        :rtype: :class:`FitResult`
+        :raises ValueError: if numpy does not support this operation. I.e. `np.<op>` does not exist.
+        """
+        if not hasattr(np, op):
+            raise ValueError(f"Numpy does not support {op} operation.")
+        result = self if inplace else copy.deepcopy(self)
+        for attr, v in result.__dict__.items():
+            if v is not None:
+                setattr(result, attr, getattr(np, op)(v))
+        return result
+
+
 class ALRModel(nn.Module, ABC):
+    # criterion is of type nn.Module, we wrap it so it wouldn't register in this module
+    _CompileParams = namedtuple('CompileParams', 'criterion optimiser')
+
     def __init__(self):
         """
         A :class:`ALRModel` provides generic methods required for common
@@ -24,6 +62,7 @@ class ALRModel(nn.Module, ABC):
         """
         super(ALRModel, self).__init__()
         self._models = []
+        self._compile_params = None
 
     @abstractmethod
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -67,6 +106,92 @@ class ALRModel(nn.Module, ABC):
         if isinstance(value, nn.Module):
             # register nn.Module
             self._models.append((value, value.state_dict()))
+
+    def compile(self, criterion: Callable, optimiser: torch.optim.Optimizer) -> None:
+        self._compile_params = ALRModel._CompileParams(criterion, optimiser)
+
+    def fit(self, train_loader: torchdata.DataLoader,
+            train_acc: Optional[bool] = True,
+            val_loader: Optional[torchdata.DataLoader] = None,
+            val_loss: Optional[bool] = False,
+            epochs: Optional[int] = 1,
+            device: _DeviceType = None) -> FitResult:
+        assert not val_loss or val_loader is not None, "If val_loss is True, val_loader must be provided."
+        if self._compile_params is None:
+            raise RuntimeError("Compile must be invoked before fitting model.")
+        criterion = self._compile_params.criterion
+        optimiser = self._compile_params.optimiser
+        training_loss = []
+        training_acc = []
+        validation_loss = []
+        validation_acc = []
+        tepochs = tqdm.trange(epochs, leave=False, file=sys.stdout)
+        for _ in tepochs:
+            # beware: self.eval() resets the state when we call self.evaluate()
+            self.train()
+            e_training_loss = []
+
+            # train
+            for x, y in train_loader:
+                if device:
+                    x, y = x.to(device), y.to(device)
+                preds = self(x)
+                loss = criterion(preds, y)
+                optimiser.zero_grad()
+                loss.backward()
+                optimiser.step()
+                e_training_loss.append(loss.item())
+
+            pfix = {}
+            # get accuracies
+            if val_loader is not None:
+                v_acc, v_loss = self.evaluate(
+                    val_loader, with_loss=val_loss, device=device)
+                validation_loss.append(v_loss)
+                validation_acc.append(v_acc)
+                if val_loss:
+                    pfix['val_loss'] = v_loss
+                pfix['val_acc'] = v_acc
+            if train_acc:
+                t_acc, _ = self.evaluate(
+                    train_loader, with_loss=False, device=device)
+                training_acc.append(t_acc)
+                pfix['train_acc'] = t_acc
+
+            training_loss.append(np.mean(e_training_loss))
+            pfix['train_loss'] = training_loss[-1]
+
+            # update tqdm
+            tepochs.set_postfix(**pfix)
+
+        return FitResult(
+            train_loss=np.array(training_loss),
+            train_acc=(np.array(training_acc) if train_acc else None),
+            val_loss=(np.array(validation_loss) if val_loss else None),
+            val_acc=(np.array(validation_acc) if val_loader else None)
+        )
+
+    def evaluate(self, data: torchdata.DataLoader,
+                 with_loss: Optional[bool] = False,
+                 device: _DeviceType = None) -> Tuple[float, Union[float, None]]:
+        self.eval()
+        if self._compile_params is None and with_loss:
+            raise RuntimeError("Compile must be invoked before evaluating model with loss.")
+        score = total = 0
+        losses = []
+        tqdm_load = tqdm.tqdm(data, desc="Evaluating model", leave=False, file=sys.stdout)
+        with torch.no_grad():
+            for x, y in tqdm_load:
+                if device:
+                    x, y = x.to(device), y.to(device)
+                _, preds = torch.max(self.predict(x), dim=1)
+                score += (preds == y).sum().item()
+                total += y.size(0)
+                if with_loss:
+                    losses.append(
+                        self._compile_params.criterion(self(x), y).item()
+                    )
+        return score / total, (np.mean(losses) if losses else None)  # noqa
 
 
 class MCDropout(ALRModel):
