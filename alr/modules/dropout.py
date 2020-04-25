@@ -167,7 +167,7 @@ class PersistentFeatureAlphaDropout(_DropoutNd):
 
 
 def replace_dropout(module: torch.nn.Module,
-                    clone: Optional[bool] = False) -> torch.nn.Module:
+                    inplace: Optional[bool] = True) -> torch.nn.Module:
     r"""
     Recursively replaces dropout modules in `module` such that dropout is performed
     regardless of the model's mode. That is, dropout is performed during training
@@ -175,10 +175,10 @@ def replace_dropout(module: torch.nn.Module,
 
     :param module: PyTorch module object
     :type module: `torch.nn.Module`
-    :param clone: If `False`, the `model` is modified *in-place*. If `True`,
+    :param inplace: If `True`, the `model` is modified *in-place*. If `False`,
                  `model` is not modified and a new model is cloned.
-    :type clone: `bool`, optional
-    :return: Same `module` instance if `clone` is `False`, else a brand new module.
+    :type inplace: `bool`, optional
+    :return: Same `module` instance if `inplace` is `False`, else a brand new module.
     :rtype: `torch.nn.Module`
     """
     def _replace_dropout(parent):
@@ -193,7 +193,7 @@ def replace_dropout(module: torch.nn.Module,
                     raise NotImplementedError(f"{type(mod).__name__} hasn't been implemented yet.")
             _replace_dropout(mod)
 
-    if clone:
+    if not inplace:
         module = copy.deepcopy(module)
     _replace_dropout(module)
     _inspect_forward(module)
