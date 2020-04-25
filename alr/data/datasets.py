@@ -44,6 +44,14 @@ class Dataset(Enum):
     RepeatedMNIST = "RepeatedMNIST"
 
     def get(self, root: Optional[str] = 'data') -> Tuple[torchdata.Dataset, torchdata.Dataset]:
+        r"""
+        Return (train, test) tuple of datasets.
+
+        :param root: root path where data will be read from or downloaded to
+        :type root: str, optional
+        :return: a 2-tuple of (train, test) datasets
+        :rtype: tuple
+        """
         train_transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize(*self.normalisation_params)
