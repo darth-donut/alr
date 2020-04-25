@@ -2,23 +2,22 @@
 Main alr module
 """
 
+import copy
+import sys
 from abc import ABC, abstractmethod
-from typing import Optional, Callable, Tuple, Union
+from collections import namedtuple
 from dataclasses import dataclass
+from typing import Optional, Callable, Tuple, Union
 
 import numpy as np
 import torch
-import sys
-import tqdm
-import copy
+import torch.utils.data as torchdata
 from torch import nn
 from torch.nn import functional as F
-from collections import namedtuple
-import torch.utils.data as torchdata
 
 from alr.acquisition import AcquisitionFunction
 from alr.modules.dropout import replace_dropout
-from alr.utils import _DeviceType
+from alr.utils import _DeviceType, range_progress_bar, progress_bar
 
 __version__ = '0.0.0b4'
 
@@ -125,7 +124,7 @@ class ALRModel(nn.Module, ABC):
         training_acc = []
         validation_loss = []
         validation_acc = []
-        tepochs = tqdm.trange(epochs, leave=False, file=sys.stdout)
+        tepochs = range_progress_bar(epochs, leave=False, file=sys.stdout)
         for _ in tepochs:
             # beware: self.eval() resets the state when we call self.evaluate()
             self.train()
@@ -179,7 +178,7 @@ class ALRModel(nn.Module, ABC):
             raise RuntimeError("Compile must be invoked before evaluating model with loss.")
         score = total = 0
         losses = []
-        tqdm_load = tqdm.tqdm(data, desc="Evaluating model", leave=False, file=sys.stdout)
+        tqdm_load = progress_bar(data, desc="Evaluating model", leave=False, file=sys.stdout)
         with torch.no_grad():
             for x, y in tqdm_load:
                 if device:

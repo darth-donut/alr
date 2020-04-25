@@ -1,17 +1,27 @@
+from collections import namedtuple
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import wraps
 from timeit import default_timer
 from typing import Optional, Callable, Union, Tuple
-from collections import namedtuple
 
+import numpy as np
 import torch
 import torch.utils.data as torchdata
-import numpy as np
+from tqdm.auto import tqdm, trange
 
 # type aliases
 _DeviceType = Optional[Union[str, torch.device]]
 _ActiveLearningDataset = namedtuple('ActiveLearningDataset', 'unlabelled training')
+
+
+def range_progress_bar(*args, **kwargs):
+    return trange(*args, **kwargs)
+
+
+def progress_bar(*args, **kwargs):
+    return tqdm(*args, **kwargs)
+
 
 @contextmanager
 def timeop():
