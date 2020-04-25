@@ -194,7 +194,7 @@ class ALRModel(nn.Module, ABC):
 
 
 class MCDropout(ALRModel):
-    def __init__(self, model: nn.Module, forward: Optional[int] = 100, clone: Optional[bool] = False):
+    def __init__(self, model: nn.Module, forward: Optional[int] = 100, inplace: Optional[bool] = True):
         """
         Implements `Monte Carlo Dropout <https://arxiv.org/abs/1506.02142>`_ (MCD). The difference between
         :meth:`forward` and :meth:`predict`
@@ -205,13 +205,12 @@ class MCDropout(ALRModel):
         :type model: `nn.Module`
         :param forward: number of stochastic forward passes
         :type forward: int, optional
-        :param clone: If `False`, the `model` is modified *in-place* such that the
-                        dropout layers are replaced with :mod:`~alr.modules.dropout` layers.
-                        If `True`, `model` is not modified and a new model is cloned.
-        :type clone: `bool`, optional
+        :param inplace: If `True`, the `model` is modified *in-place* when the dropout layers are
+                        replaced. If `False`, `model` is not modified and a new model is cloned.
+        :type inplace: `bool`, optional
         """
         super(MCDropout, self).__init__()
-        self.base_model = replace_dropout(model, clone=clone)
+        self.base_model = replace_dropout(model, inplace=inplace)
         self.n_forward = forward
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
