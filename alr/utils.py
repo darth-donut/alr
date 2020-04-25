@@ -2,11 +2,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import wraps
 from timeit import default_timer
-from typing import Optional, Callable, Union, Tuple
+from typing import Optional, Callable, Union
 
 import torch
+import torch.utils.data as torchdata
 import numpy as np
-from sklearn.model_selection import StratifiedShuffleSplit
 
 # type aliases
 _DeviceType = Optional[Union[str, torch.device]]
@@ -64,27 +64,24 @@ def time_this(func: Callable):
     return dec
 
 
-def stratified_partition(X_train: np.array, y_train: np.array, train_size: Optional[int] = 20) -> \
-        Tuple[np.array, np.array, np.array, np.array]:
-    """
-    Returns (`X_train`, `y_train`, `X_pool`, `y_pool`) where `X_train.size(0) == train_size` and
-    `y_train`'s classes are as balanced as possible.
-
-    :param X_train: training input
-    :type X_train: `np.array`
-    :param y_train: training targets
-    :type y_train: `np.array`
-    :param train_size: `X_train`'s output size
-    :type train_size: int, optional
-    :return: (`X_train`, `y_train`, `X_pool`, `y_pool`) where
-             `X_train.size(0) == train_size` and
-             `y_train`'s classes are as balanced as possible.
-    :rtype: 4-tuple consisting of `np.array`
-    """
-    sss = StratifiedShuffleSplit(n_splits=1, train_size=train_size)
-    train_idxs, pool_idxs = next(sss.split(X_train, y_train))
-    return (X_train[train_idxs], y_train[train_idxs],
-            X_train[pool_idxs], y_train[pool_idxs])
+def stratified_partition(ds: torchdata.Dataset, classes: int, size: int):
+    c = size // classes
+    extra = size % classes
+    count = {cls: c for cls in range(classes)}
+    original_idxs = set(range(len(ds)))
+    sampled_idxs = []
+    # the first `extra` classes gets the extra counts
+    while extra:
+        count[extra] += 1
+        extra -= 1
+    for idx in np.random.permutation(len(ds)):
+        if all(i == 0 for i in count.values()):
+            break
+        y = ds[idx][1]
+        if count[y]:
+            count[y] -= 1
+            sampled_idxs.append(idx)
+    return torchdata.Subset(ds, list(original_idxs - set(sampled_idxs))), torchdata.Subset(ds, sampled_idxs)
 
 # def run_experiment(model: ALRModel, acquisition_function: AcquisitionFunction, X_train: torch.Tensor,
 #                    y_train: torch.Tensor, X_pool: torch.Tensor, y_pool: torch.Tensor,
