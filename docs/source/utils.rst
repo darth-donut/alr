@@ -16,6 +16,18 @@ Functions
 ---------
 
 
+:hidden:`range_progress_bar`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: range_progress_bar
+
+
+:hidden:`progress_bar`
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: progress_bar
+
+
 :hidden:`timeop`
 ~~~~~~~~~~~~~~~~
 

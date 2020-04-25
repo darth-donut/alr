@@ -11,6 +11,16 @@ Classses
 ---------
 
 
+:hidden:`FitResult`
+~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: FitResult
+    :members:
+    :undoc-members:
+    :show-inheritance:
+    
+
+
 :hidden:`ALRModel`
 ~~~~~~~~~~~~~~~~~~
 

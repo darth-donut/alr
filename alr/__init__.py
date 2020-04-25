@@ -24,6 +24,9 @@ __version__ = '0.0.0b4'
 
 @dataclass
 class FitResult:
+    r"""
+    A result object returned by :class:`ALRModel`'s :meth:`~ALRModel.fit` method.
+    """
     train_loss: np.ndarray
     train_acc: Union[np.ndarray, float, None] = None
     val_loss: Union[np.ndarray, float, None] = None
@@ -106,7 +109,20 @@ class ALRModel(nn.Module, ABC):
             # register nn.Module
             self._models.append((value, value.state_dict()))
 
-    def compile(self, criterion: Callable, optimiser: torch.optim.Optimizer) -> None:
+    def compile(self, criterion: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+                optimiser: torch.optim.Optimizer) -> None:
+        r"""
+        Compiles the model. Similar to Keras' API, the model saves the criterion
+        and optimiser for use in :meth:`fit` later on.
+
+        :param criterion: a function that takes model outputs and target classes as inputs and
+                            returns a score tensor
+        :type criterion: torch.Tensor :math:`\times` torch.Tensor :math:`\rightarrow` torch.Tensor
+        :param optimiser: optimser object
+        :type optimiser: torch.optim.Optimizer
+        :return: None
+        :rtype: NoneType
+        """
         self._compile_params = ALRModel._CompileParams(criterion, optimiser)
 
     def fit(self, train_loader: torchdata.DataLoader,
@@ -115,6 +131,24 @@ class ALRModel(nn.Module, ABC):
             val_loss: Optional[bool] = False,
             epochs: Optional[int] = 1,
             device: _DeviceType = None) -> FitResult:
+        r"""
+        A regular training loop much like Keras' fit function.
+
+        :param train_loader: training data's DataLoader
+        :type train_loader: torch.utils.data.DataLoader
+        :param train_acc: at the end of each epoch, the training accuracy is calculated if set to true
+        :type train_acc: bool, optional
+        :param val_loader: validation data's DataLoader
+        :type val_loader: torch.utils.data.DataLoader, optional
+        :param val_loss: at the end of each epoch, the validation loss is calculated if set to true.
+        :type val_loss: bool, optional
+        :param epochs: number of epochs
+        :type epochs: int, optional
+        :param device: device type
+        :type device: str, torch.device, None
+        :return: :class:`FitResult` object containing training statistics
+        :rtype: :class:`FitResult`
+        """
         assert not val_loss or val_loader is not None, "If val_loss is True, val_loader must be provided."
         if self._compile_params is None:
             raise RuntimeError("Compile must be invoked before fitting model.")
@@ -173,6 +207,21 @@ class ALRModel(nn.Module, ABC):
     def evaluate(self, data: torchdata.DataLoader,
                  with_loss: Optional[bool] = False,
                  device: _DeviceType = None) -> Tuple[float, Union[float, None]]:
+        r"""
+        Evaluate this model and return the mean accuracy and loss.
+
+        :param data: dataset DataLoader
+        :type data: torch.utils.data.DataLoader
+        :param with_loss: if true, then calculate the loss as well. This incurs additional
+                            computational time as this method uses
+                            :meth:`predict` to calculate accuracies
+                            and :meth:`forward` to calculate losses.
+        :type with_loss: bool, optional
+        :param device: device type
+        :type device: str, torch.device, None
+        :return: 2-tuple of mean accuracy and losses. Losses is None if `with_loss` is false.
+        :rtype: tuple
+        """
         self.eval()
         if self._compile_params is None and with_loss:
             raise RuntimeError("Compile must be invoked before evaluating model with loss.")
@@ -230,7 +279,7 @@ class MCDropout(ALRModel):
         raise RuntimeError('Use model.predict(x) during evaluation.')
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
-        """
+        r"""
         Returns the mean softmax score of :meth:`stochastic_forward` passes.
 
         Equivalent to:
@@ -240,9 +289,10 @@ class MCDropout(ALRModel):
             def predict(x):
                 return torch.mean(stochastic_forward(x), dim=0)
 
-        :param x: input tensor
+        :param x: input tensor, any size
         :type x: `torch.Tensor`
-        :return: output tensor
+        :return: output tensor of size :math:`N \times C` where :math:`N` is the
+                    batch size and :math:`C` is the number of target classes.
         :rtype: `torch.Tensor`
         """
         return torch.mean(self.stochastic_forward(x), dim=0)
