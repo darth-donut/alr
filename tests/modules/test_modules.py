@@ -39,7 +39,7 @@ def _is_not_persistent(mod):
 
 def test_dropout_replacement_clone():
     model = Net()
-    model2 = replace_dropout(model, clone=True)
+    model2 = replace_dropout(model, inplace=False)
     model2.apply(_is_persistent)
     model.apply(_is_not_persistent)
 
