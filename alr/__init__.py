@@ -3,7 +3,6 @@ Main alr module
 """
 
 import copy
-import sys
 from abc import ABC, abstractmethod
 from collections import namedtuple
 from dataclasses import dataclass
@@ -167,7 +166,7 @@ class ALRModel(nn.Module, ABC):
         training_acc = []
         validation_loss = []
         validation_acc = []
-        tepochs = range_progress_bar(epochs, leave=False, file=sys.stdout)
+        tepochs = range_progress_bar(epochs, leave=False)
         for _ in tepochs:
             # beware: self.eval() resets the state when we call self.evaluate()
             self.train()
@@ -236,7 +235,7 @@ class ALRModel(nn.Module, ABC):
             raise RuntimeError("Compile must be invoked before evaluating model with loss.")
         score = total = 0
         losses = []
-        tqdm_load = progress_bar(data, desc="Evaluating model", leave=False, file=sys.stdout)
+        tqdm_load = progress_bar(data, desc="Evaluating model", leave=False)
         with torch.no_grad():
             for x, y in tqdm_load:
                 if device:
