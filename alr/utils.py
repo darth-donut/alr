@@ -2,7 +2,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import wraps
 from timeit import default_timer
-from typing import Optional, Callable, Union
+from typing import Optional, Callable, Union, Tuple
+from collections import namedtuple
 
 import torch
 import torch.utils.data as torchdata
@@ -10,7 +11,7 @@ import numpy as np
 
 # type aliases
 _DeviceType = Optional[Union[str, torch.device]]
-
+_ActiveLearningDataset = namedtuple('ActiveLearningDataset', 'unlabelled training')
 
 @contextmanager
 def timeop():
@@ -64,7 +65,25 @@ def time_this(func: Callable):
     return dec
 
 
-def stratified_partition(ds: torchdata.Dataset, classes: int, size: int):
+def stratified_partition(ds: torchdata.Dataset, classes: int, size: int) \
+        -> Tuple[torchdata.Dataset, torchdata.Dataset]:
+    r"""
+    Partitions `ds` into training pool and a faux unlabelled pool. The "unlabelled"
+    pool will contain `len(ds) - size` data points and the training pool will contain
+    `size` data points where the target class is as balanced as possible. Note,
+    the faux "unlabelled" pool will contain target labels since it's
+    derived from the training pool.
+
+    :param ds: dataset containing input features and target class
+    :type ds: :class:`torch.utils.data.Dataset`
+    :param classes: number of target classes contained in `ds`
+    :type classes: int
+    :param size: size of resulting training pool
+    :type size: int
+    :return: (unlabelled pool, training pool)
+    :rtype: tuple
+    """
+    assert size < len(ds)
     c = size // classes
     extra = size % classes
     count = {cls: c for cls in range(classes)}
@@ -81,7 +100,9 @@ def stratified_partition(ds: torchdata.Dataset, classes: int, size: int):
         if count[y]:
             count[y] -= 1
             sampled_idxs.append(idx)
-    return torchdata.Subset(ds, list(original_idxs - set(sampled_idxs))), torchdata.Subset(ds, sampled_idxs)
+    return _ActiveLearningDataset(unlabelled=torchdata.Subset(ds, list(original_idxs - set(sampled_idxs))),
+                                  training=torchdata.Subset(ds, sampled_idxs))
+
 
 # def run_experiment(model: ALRModel, acquisition_function: AcquisitionFunction, X_train: torch.Tensor,
 #                    y_train: torch.Tensor, X_pool: torch.Tensor, y_pool: torch.Tensor,
