@@ -222,4 +222,4 @@ todo.txt
 docs/**/*.ipynb
 /data
 experiments/data
-docs/source/experiments
+docs/source/experiments/data
