@@ -1,3 +1,4 @@
+import pytest
 from alr.data.datasets import Dataset
 
 
@@ -11,11 +12,15 @@ def test_FashionMNIST():
     assert len(train) == 60_000 and len(test) == 10_000
 
 
+# todo(test)
+@pytest.mark.skip(reason="HTTP 500")
 def test_EMNISTMerge():
     train, test = Dataset.EMNISTMerge.get()
     assert len(train) == 697_932 and len(test) == 116_323
 
 
+# todo(test)
+@pytest.mark.skip(reason="HTTP 500")
 def test_EMINISTBalanced():
     train, test = Dataset.EMNISTMerge.get()
     assert len(train) == 112_800 and len(test) == 18_800

@@ -11,6 +11,26 @@ Classses
 ---------
 
 
+:hidden:`Elapsed`
+~~~~~~~~~~~~~~~~~
+
+.. autoclass:: Elapsed
+    :members:
+    :undoc-members:
+    :show-inheritance:
+    
+
+
+:hidden:`Time`
+~~~~~~~~~~~~~~
+
+.. autoclass:: Time
+    :members:
+    :undoc-members:
+    :show-inheritance:
+    
+
+
 
 Functions
 ---------

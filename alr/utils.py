@@ -1,9 +1,12 @@
+import inspect
+import sys
+import types
 from collections import namedtuple
-from contextlib import contextmanager
+from contextlib import contextmanager, AbstractContextManager
 from dataclasses import dataclass
 from functools import wraps
 from timeit import default_timer
-from typing import Optional, Callable, Union, Tuple
+from typing import Optional, Callable, Union, Tuple, List
 
 import numpy as np
 import torch
@@ -21,6 +24,12 @@ def range_progress_bar(*args, **kwargs):
 
 def progress_bar(*args, **kwargs):
     return tqdm(*args, **kwargs)
+
+
+@dataclass
+class Elapsed:
+    """Elapsed time in seconds"""
+    seconds: Optional[float] = None
 
 
 @contextmanager
@@ -41,9 +50,6 @@ def timeop():
         if the expression in the `with` block raises an exception,
         `t.seconds is None`.
     """
-    @dataclass
-    class Elapsed:
-        seconds: Optional[float] = None
     t = Elapsed()
     tick = default_timer()
     yield t
@@ -73,6 +79,115 @@ def time_this(func: Callable):
             res = func(*args, **kwargs)
         return res, t
     return dec
+
+
+class Time(AbstractContextManager):
+    def __init__(self, fn: Callable):
+        r"""
+        Given a callable, keeps track of the execution time every time it is invoked.
+
+        .. code:: python
+
+            class Foo:
+                def m(self):
+                    time.sleep(1)
+                    return 42
+            f = Foo()
+
+            # start tracking f.m
+            with Time(f.m) as t:
+                # do something with f.m
+                f.m()
+            # stop tracking f.m
+
+            print(t.tape)
+
+        :param fn: callable to track. Can be method or a function but not a nested or lambda function.
+        :type fn: Callable
+
+        .. warning::
+            The callable cannot be a lambda or nested function!
+        """
+        self._tape: List[Elapsed] = []
+        self._fn = fn
+        self._namespace = None
+        self._register()
+
+    def _register(self):
+        fn = self._fn
+        if inspect.ismethod(fn):
+            self._namespace = fn.__self__
+            assert hasattr(self._namespace, fn.__name__)
+            setattr(self._namespace, fn.__name__,
+                    types.MethodType(self._timer(fn, is_method=True), fn.__self__))
+        elif inspect.isfunction(fn):
+            # parent module
+            mod = inspect.getmodule(inspect.stack()[2][0])
+            if hasattr(mod, fn.__name__):
+                self._namespace = mod
+            elif self._try_static(mod, fn):
+                self._namespace = self._try_static(mod, fn)
+            else:
+                raise ValueError(f"Can't find {fn} in module level or class level.")
+            setattr(self._namespace, fn.__name__, self._timer(fn, is_method=False))
+        else:
+            raise ValueError(f"{fn} is not a method or a function.")
+
+    def _try_static(self, mod, fn: Callable):
+        classname = fn.__qualname__.split(".")[0]
+        if hasattr(mod, classname):
+            return getattr(mod, classname)
+        return None
+
+    def deregister(self) -> None:
+        r"""
+        Stop tracking the registered function. This is automatically invoked if
+        :class:`Time` was constructed in a `with` block.
+
+        :return: None
+        :rtype: NoneType
+        """
+        setattr(self._namespace, self._fn.__name__, self._fn)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.deregister()
+
+    def _timer(self, fn: Callable, is_method: bool):
+        @wraps(fn)
+        def _t(*args, **kwargs):
+            if is_method:
+                # don't pass self to fn, since fn is already bound to self
+                args = args[1:]
+            with timeop() as t:
+                res = fn(*args, **kwargs)
+            self._tape.append(t)
+            return res
+        return _t
+
+    def reset(self) -> None:
+        r"""
+        Empties the tape
+
+        :return: None
+        :rtype: NoneType
+        """
+        self._tape = []
+
+    @property
+    def tape(self) -> List[Elapsed]:
+        r"""
+        Returns a list of :class:`Elapsed` objects denoting the time each invocation took.
+        The length of this list is equal to the number of times the function was invoked while
+        registered.
+
+        :return: list of elapsed time equal in length to the number
+                    of times the function was invoked whilst registered.
+        :rtype: List[Elapsed]
+        """
+        return self._tape
 
 
 def stratified_partition(ds: torchdata.Dataset, classes: int, size: int) \

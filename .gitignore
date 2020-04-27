@@ -223,3 +223,4 @@ docs/**/*.ipynb
 /data
 experiments/data
 docs/source/experiments/data
+.DS_Store
