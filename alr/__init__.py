@@ -166,14 +166,14 @@ class ALRModel(nn.Module, ABC):
         training_acc = []
         validation_loss = []
         validation_acc = []
-        tepochs = range_progress_bar(epochs, leave=False)
+        tepochs = range_progress_bar(epochs, desc="Epoch", leave=False)
         for _ in tepochs:
             # beware: self.eval() resets the state when we call self.evaluate()
             self.train()
             e_training_loss = []
 
             # train
-            for x, y in train_loader:
+            for x, y in progress_bar(train_loader, desc="Train batch", leave=False):
                 if device:
                     x, y = x.to(device), y.to(device)
                 preds = self(x)
