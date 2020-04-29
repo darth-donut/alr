@@ -241,10 +241,7 @@ class MCDropout(ALRModel):
                  forward: Optional[int] = 100,
                  inplace: Optional[bool] = True):
         """
-        Implements `Monte Carlo Dropout <https://arxiv.org/abs/1506.02142>`_ (MCD). The difference between
-        :meth:`forward` and :meth:`predict`
-        is that the former returns a single forward pass (logits) while the
-        latter returns the mean of `forward` number of passes (softmax scores).
+        Implements `Monte Carlo Dropout <https://arxiv.org/abs/1506.02142>`_ (MCD).
 
         :param model: base `torch.nn.Module` object
         :type model: `nn.Module`
