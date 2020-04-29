@@ -260,19 +260,14 @@ class MCDropout(ALRModel):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Regular forward pass. Raises exception if `self.training` is `False`.
+        Regular forward pass.
 
         :param x: input tensor
         :type x: `torch.Tensor`
         :return: output tensor
         :rtype: `torch.Tensor`
-        :raises RuntimeError: raises `RuntimeError` if this method is used during evaluation;
-            :meth:`predict` should be used instead.
         """
-        if self.training:
-            assert self.base_model.training
-            return self._activation(self.base_model(x), dim=1)
-        raise RuntimeError('Use model.predict(x) during evaluation.')
+        return self._activation(self.base_model(x), dim=1)
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         r"""
