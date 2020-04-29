@@ -245,7 +245,10 @@ class MCDropout(ALRModel):
 
         :param model: base `torch.nn.Module` object
         :type model: `nn.Module`
-        :param apply_logsoft: if set to `True`, an additional logsoftmax layer is appended to the model's output.
+        :param apply_logsoft: if set to `True`, invoke log-softmax on :meth:`forward`,
+                                :meth:`stochastic_forward`, and :meth:`predict`'s outputs.
+                                This should be set to `False` if `model`
+                                already returns softmax/log-softmax scores.
         :type apply_logsoft: bool
         :param forward: number of stochastic forward passes
         :type forward: int, optional
