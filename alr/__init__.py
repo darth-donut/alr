@@ -18,7 +18,7 @@ from alr.acquisition import AcquisitionFunction
 from alr.modules.dropout import replace_dropout
 from alr.utils import _DeviceType, range_progress_bar, progress_bar
 
-__version__ = '0.0.0b5'
+__version__ = '0.0.0b6'
 
 
 @dataclass
@@ -136,7 +136,6 @@ class ALRModel(nn.Module, ABC):
     def fit(self, train_loader: torchdata.DataLoader,
             train_acc: Optional[bool] = True,
             val_loader: Optional[torchdata.DataLoader] = None,
-            val_loss: Optional[bool] = False,
             epochs: Optional[int] = 1,
             device: _DeviceType = None) -> FitResult:
         r"""
@@ -146,10 +145,9 @@ class ALRModel(nn.Module, ABC):
         :type train_loader: torch.utils.data.DataLoader
         :param train_acc: at the end of each epoch, the training accuracy is calculated if set to true
         :type train_acc: bool, optional
-        :param val_loader: validation data's DataLoader
+        :param val_loader: validation data's DataLoader. If provided, the validation accuracy and loss
+                            are recorded at the end of each epoch.
         :type val_loader: torch.utils.data.DataLoader, optional
-        :param val_loss: at the end of each epoch, the validation loss is calculated if set to true.
-        :type val_loss: bool, optional
         :param epochs: number of epochs
         :type epochs: int, optional
         :param device: device type
@@ -157,7 +155,6 @@ class ALRModel(nn.Module, ABC):
         :return: :class:`FitResult` object containing training statistics
         :rtype: :class:`FitResult`
         """
-        assert not val_loss or val_loader is not None, "If val_loss is True, val_loader must be provided."
         if self._compile_params is None:
             raise RuntimeError("Compile must be invoked before fitting model.")
         criterion = self._compile_params.criterion
@@ -184,18 +181,15 @@ class ALRModel(nn.Module, ABC):
                 e_training_loss.append(loss.item())
 
             pfix = {}
-            # get accuracies
+            # get accuracies and losses
             if val_loader is not None:
-                v_acc, v_loss = self.evaluate(
-                    val_loader, with_loss=val_loss, device=device)
+                v_acc, v_loss = self.evaluate(val_loader, device=device)
                 validation_loss.append(v_loss)
                 validation_acc.append(v_acc)
-                if val_loss:
-                    pfix['val_loss'] = v_loss
+                pfix['val_loss'] = v_loss
                 pfix['val_acc'] = v_acc
             if train_acc:
-                t_acc, _ = self.evaluate(
-                    train_loader, with_loss=False, device=device)
+                t_acc, _ = self.evaluate(train_loader, device=device)
                 training_acc.append(t_acc)
                 pfix['train_acc'] = t_acc
 
@@ -208,51 +202,42 @@ class ALRModel(nn.Module, ABC):
         return FitResult(
             train_loss=np.array(training_loss),
             train_acc=(np.array(training_acc) if train_acc else None),
-            val_loss=(np.array(validation_loss) if val_loss else None),
+            val_loss=(np.array(validation_loss) if val_loader else None),
             val_acc=(np.array(validation_acc) if val_loader else None)
         )
 
     def evaluate(self, data: torchdata.DataLoader,
-                 with_loss: Optional[bool] = False,
-                 device: _DeviceType = None) -> Tuple[float, Union[float, None]]:
+                 device: _DeviceType = None) -> Tuple[float, float]:
         r"""
         Evaluate this model and return the mean accuracy and loss.
 
         :param data: dataset DataLoader
         :type data: torch.utils.data.DataLoader
-        :param with_loss: if true, then calculate the loss as well. This incurs additional
-                            computational time as this method uses
-                            :meth:`predict` to calculate accuracies
-                            and :meth:`forward` to calculate losses.
-        :type with_loss: bool, optional
         :param device: device type
         :type device: str, torch.device, None
-        :return: 2-tuple of mean accuracy and losses. Losses is None if `with_loss` is false.
+        :return: 2-tuple of mean accuracy and losses.
         :rtype: tuple
         """
         self.eval()
-        if self._compile_params is None and with_loss:
-            raise RuntimeError("Compile must be invoked before evaluating model with loss.")
-        score = total = 0
+        if self._compile_params is None:
+            raise RuntimeError("Compile must be invoked before evaluating model.")
+        score = 0
         losses = []
         tqdm_load = progress_bar(data, desc="Evaluating model", leave=False)
         with torch.no_grad():
             for x, y in tqdm_load:
                 if device:
                     x, y = x.to(device), y.to(device)
-                _, preds = torch.max(self.predict(x), dim=1)
-                score += (preds == y).sum().item()
-                total += y.size(0)
-                if with_loss:
-                    losses.append(
-                        self._compile_params.criterion(self(x), y).item()
-                    )
-        return score / total, (np.mean(losses) if losses else None)  # noqa
+                pred = self.predict(x)
+                _, pred_lab = torch.max(pred, dim=1)
+                score += (pred_lab == y).sum().item()
+                losses.append(self._compile_params.criterion(pred, y).item())
+        return score / len(data.dataset), np.mean(losses)
 
 
 class MCDropout(ALRModel):
     def __init__(self, model: nn.Module,
-                 logits: bool,
+                 apply_logsoft: bool,
                  forward: Optional[int] = 100,
                  inplace: Optional[bool] = True):
         """
@@ -263,11 +248,8 @@ class MCDropout(ALRModel):
 
         :param model: base `torch.nn.Module` object
         :type model: `nn.Module`
-        :param logits: whether `model` returns logits. If `True`, then :meth:`stochastic_forward` and
-                        :meth:`predict` will return apply the softmax activation on the logits, else
-                        they will return the values from `model` as-is.
-
-        :type logits: bool
+        :param apply_logsoft: if set to `True`, an additional logsoftmax layer is appended to the model's output.
+        :type apply_logsoft: bool
         :param forward: number of stochastic forward passes
         :type forward: int, optional
         :param inplace: If `True`, the `model` is modified *in-place* when the dropout layers are
@@ -277,8 +259,7 @@ class MCDropout(ALRModel):
         super(MCDropout, self).__init__()
         self.base_model = replace_dropout(model, inplace=inplace)
         self.n_forward = forward
-        # todo(optim): use F.log_softmax instead. Your acquisition functions may have to adapt to this
-        self._activation = F.softmax if logits else lambda x, dim: x
+        self._activation = F.log_softmax if apply_logsoft else lambda x, dim: x
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -293,7 +274,7 @@ class MCDropout(ALRModel):
         """
         if self.training:
             assert self.base_model.training
-            return self.base_model(x)
+            return self._activation(self.base_model(x), dim=1)
         raise RuntimeError('Use model.predict(x) during evaluation.')
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
