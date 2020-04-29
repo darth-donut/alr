@@ -251,7 +251,10 @@ class ALRModel(nn.Module, ABC):
 
 
 class MCDropout(ALRModel):
-    def __init__(self, model: nn.Module, forward: Optional[int] = 100, inplace: Optional[bool] = True):
+    def __init__(self, model: nn.Module,
+                 logits: bool,
+                 forward: Optional[int] = 100,
+                 inplace: Optional[bool] = True):
         """
         Implements `Monte Carlo Dropout <https://arxiv.org/abs/1506.02142>`_ (MCD). The difference between
         :meth:`forward` and :meth:`predict`
@@ -260,6 +263,11 @@ class MCDropout(ALRModel):
 
         :param model: base `torch.nn.Module` object
         :type model: `nn.Module`
+        :param logits: whether `model` returns logits. If `True`, then :meth:`stochastic_forward` and
+                        :meth:`predict` will return apply the softmax activation on the logits, else
+                        they will return the values from `model` as-is.
+
+        :type logits: bool
         :param forward: number of stochastic forward passes
         :type forward: int, optional
         :param inplace: If `True`, the `model` is modified *in-place* when the dropout layers are
@@ -269,6 +277,8 @@ class MCDropout(ALRModel):
         super(MCDropout, self).__init__()
         self.base_model = replace_dropout(model, inplace=inplace)
         self.n_forward = forward
+        # todo(optim): use F.log_softmax instead. Your acquisition functions may have to adapt to this
+        self._activation = F.softmax if logits else lambda x, dim: x
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -288,7 +298,7 @@ class MCDropout(ALRModel):
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         r"""
-        Returns the mean softmax score of :meth:`stochastic_forward` passes.
+        Returns the mean score of :meth:`stochastic_forward` passes.
 
         Equivalent to:
 
@@ -319,7 +329,7 @@ class MCDropout(ALRModel):
         :rtype: `torch.Tensor`
         """
         preds = torch.stack(
-            [F.softmax(self.base_model(x), dim=1) for _ in range(self.n_forward)]
+            [self._activation(self.base_model(x), dim=1) for _ in range(self.n_forward)]
         )
         assert preds.size(0) == self.n_forward
         return preds
