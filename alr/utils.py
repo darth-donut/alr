@@ -15,7 +15,7 @@ from tqdm.auto import tqdm, trange
 
 # type aliases
 _DeviceType = Optional[Union[str, torch.device]]
-_ActiveLearningDataset = namedtuple('ActiveLearningDataset', 'unlabelled training')
+_ActiveLearningDataset = namedtuple('ActiveLearningDataset', 'training unlabelled')
 
 
 def range_progress_bar(*args, **kwargs):
@@ -73,11 +73,13 @@ def time_this(func: Callable):
     :param func: any function
     :return: 2-tuple of (result, elapsed time)
     """
+
     @wraps(func)
     def dec(*args, **kwargs):
         with timeop() as t:
             res = func(*args, **kwargs)
         return res, t
+
     return dec
 
 
@@ -165,6 +167,7 @@ class Time(AbstractContextManager):
                 res = fn(*args, **kwargs)
             self._tape.append(t)
             return res
+
         return _t
 
     def reset(self) -> None:
@@ -205,7 +208,7 @@ def stratified_partition(ds: torchdata.Dataset, classes: int, size: int) \
     :type classes: int
     :param size: size of resulting training pool
     :type size: int
-    :return: (unlabelled pool, training pool)
+    :return: (training pool, unlabelled pool)
     :rtype: tuple
     """
     assert size < len(ds)
@@ -225,5 +228,5 @@ def stratified_partition(ds: torchdata.Dataset, classes: int, size: int) \
         if count[y]:
             count[y] -= 1
             sampled_idxs.append(idx)
-    return _ActiveLearningDataset(unlabelled=torchdata.Subset(ds, list(original_idxs - set(sampled_idxs))),
-                                  training=torchdata.Subset(ds, sampled_idxs))
+    return _ActiveLearningDataset(training=torchdata.Subset(ds, sampled_idxs),
+                                  unlabelled=torchdata.Subset(ds, list(original_idxs - set(sampled_idxs))))
