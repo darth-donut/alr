@@ -137,6 +137,7 @@ class ALRModel(nn.Module, ABC):
             train_acc: Optional[bool] = True,
             val_loader: Optional[torchdata.DataLoader] = None,
             epochs: Optional[int] = 1,
+            quiet: Optional[bool] = False,
             device: _DeviceType = None) -> FitResult:
         r"""
         A regular training loop much like Keras' fit function.
@@ -150,6 +151,8 @@ class ALRModel(nn.Module, ABC):
         :type val_loader: torch.utils.data.DataLoader, optional
         :param epochs: number of epochs
         :type epochs: int, optional
+        :param quiet: display `tqdm` loading bar if `False`.
+        :type quiet: bool, optional
         :param device: device type
         :type device: str, torch.device, None
         :return: :class:`FitResult` object containing training statistics
@@ -163,14 +166,15 @@ class ALRModel(nn.Module, ABC):
         training_acc = []
         validation_loss = []
         validation_acc = []
-        tepochs = range_progress_bar(epochs, desc="Epoch", leave=False)
+        tepochs = range_progress_bar(epochs, desc="Epoch", leave=False) if not quiet else range(epochs)
         for _ in tepochs:
             # beware: self.eval() resets the state when we call self.evaluate()
             self.train()
             e_training_loss = []
 
+            tbatch = progress_bar(train_loader, desc="Train batch", leave=False) if not quiet else train_loader
             # train
-            for x, y in progress_bar(train_loader, desc="Train batch", leave=False):
+            for x, y in tbatch:
                 if device:
                     x, y = x.to(device), y.to(device)
                 preds = self(x)
@@ -189,7 +193,7 @@ class ALRModel(nn.Module, ABC):
                 pfix['val_loss'] = v_loss
                 pfix['val_acc'] = v_acc
             if train_acc:
-                t_acc, _ = self.evaluate(train_loader, device=device)
+                t_acc, _ = self.evaluate(train_loader, device=device, quiet=quiet)
                 training_acc.append(t_acc)
                 pfix['train_acc'] = t_acc
 
@@ -197,7 +201,8 @@ class ALRModel(nn.Module, ABC):
             pfix['train_loss'] = training_loss[-1]
 
             # update tqdm
-            tepochs.set_postfix(**pfix)
+            if not quiet:
+                tepochs.set_postfix(**pfix)
 
         return FitResult(
             train_loss=np.array(training_loss),
@@ -206,13 +211,15 @@ class ALRModel(nn.Module, ABC):
             val_acc=(np.array(validation_acc) if val_loader else None)
         )
 
-    def evaluate(self, data: torchdata.DataLoader,
+    def evaluate(self, data: torchdata.DataLoader, quiet: Optional[bool] = False,
                  device: _DeviceType = None) -> Tuple[float, float]:
         r"""
         Evaluate this model and return the mean accuracy and loss.
 
         :param data: dataset DataLoader
         :type data: torch.utils.data.DataLoader
+        :param quiet: display `tqdm` loading bar if `False`.
+        :type quiet: bool, optional
         :param device: device type
         :type device: str, torch.device, None
         :return: 2-tuple of mean accuracy and losses.
@@ -223,7 +230,7 @@ class ALRModel(nn.Module, ABC):
             raise RuntimeError("Compile must be invoked before evaluating model.")
         score = 0
         losses = []
-        tqdm_load = progress_bar(data, desc="Evaluating model", leave=False)
+        tqdm_load = progress_bar(data, desc="Evaluating model", leave=False) if not quiet else data
         with torch.no_grad():
             for x, y in tqdm_load:
                 if device:
