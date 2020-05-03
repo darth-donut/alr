@@ -173,13 +173,12 @@ def replace_dropout(module: torch.nn.Module,
     regardless of the model's mode. That is, dropout is performed during training
     (`model.train()`) and inference (`model.eval()`) modes.
 
-    :param module: PyTorch module object
-    :type module: `torch.nn.Module`
-    :param inplace: If `True`, the `model` is modified *in-place*. If `False`,
-                 `model` is not modified and a new model is cloned.
-    :type inplace: `bool`, optional
-    :return: Same `module` instance if `inplace` is `False`, else a brand new module.
-    :rtype: `torch.nn.Module`
+    Args:
+        module (`torch.nn.Module`): PyTorch module object
+        inplace (bool, optional): If `True`, the `model` is modified *in-place*. If `False`, `model` is not modified and a new model is cloned.
+
+    Returns:
+        `torch.nn.Module`: Same `module` instance if `inplace` is `False`, else a brand new module.
     """
     def _replace_dropout(parent):
         for name, mod in parent.named_children():

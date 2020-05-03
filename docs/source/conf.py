@@ -47,8 +47,10 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.intersphinx',
     'sphinx.ext.viewcode',
-    'nbsphinx'
+    'nbsphinx',
+    'sphinx.ext.napoleon',
 ]
+
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -79,3 +81,5 @@ master_doc = 'index'
 # ADDED: import experiments from ../../experiments
 shutil.rmtree('experiments', ignore_errors=True)
 shutil.copytree(EXPERIMENT_DIR, 'experiments')
+# ADDED: don't execute cells, ever.
+nbsphinx_execute = 'never'

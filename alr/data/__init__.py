@@ -17,12 +17,12 @@ class UnlabelledDataset(torchdata.Dataset):
         the provided "unlabelled" dataset is, in fact, labelled. This is especially for
         benchmarking studies!
 
-        :param dataset: unlabelled dataset
-        :type dataset: :class:`torch.utils.data.Dataset`
-        :param label_fn: a function that takes an unlabelled dataset and returns another
-            dataset that's fully labelled. If this is not provided, then `dataset` should
-            be labelled.
-        :type label_fn: Callable: Dataset :math:`\rightarrow` Dataset, optional
+        Args:
+            dataset (:class:`torch.utils.data.Dataset`): unlabelled dataset
+            label_fn (Callable: Dataset :math:`\rightarrow` Dataset, optional): a function that
+                takes an unlabelled dataset and returns another
+                dataset that's fully labelled. If this is not provided, then `dataset` should
+                be labelled.
         """
         self._dataset = dataset
         self._label_fn = label_fn
@@ -35,11 +35,12 @@ class UnlabelledDataset(torchdata.Dataset):
         Label and return points specified by `idxs` according to provided `label_fn`.
         These labelled points will no longer be part of this dataset.
 
-        :param idxs: indices of points to label
-        :type idxs: `Sequence[int]`
-        :return: a labelled dataset where each point is specified by `idxs` and labelled
-            by `label_fn`.
-        :rtype: :class:`torch.utils.data.Dataset`
+        Args:
+            idxs (`Sequence[int]`): indices of points to label
+
+        Returns:
+            :class:`torch.utils.data.Dataset`: a labelled dataset where each
+                                                point is specified by `idxs` and labelled by `label_fn`.
         """
         # indices of data where it hasn't been labelled yet
         local_mask = self._idx_mask
@@ -73,8 +74,8 @@ class UnlabelledDataset(torchdata.Dataset):
         r"""
         Returns a 1-D tensor of indices that were labelled in the past.
 
-        :return: all the indices that were labelled by :meth:`label`
-        :rtype: `torch.Tensor`
+        Returns:
+            `torch.Tensor`: all the indices that were labelled by :meth:`label`
         """
         return torch.nonzero(~self._mask).flatten()
 
@@ -83,8 +84,8 @@ class UnlabelledDataset(torchdata.Dataset):
         Reset to initial state -- all labelled points are unlabelled and
         introduced back into the pool.
 
-        :return: None
-        :rtype: NoneType
+        Returns:
+            NoneType: None
         """
         self._mask = torch.ones(len(self._dataset), dtype=torch.bool)
         self._idx_mask = torch.arange(len(self._dataset))
@@ -103,12 +104,11 @@ class DataManager:
         acquired by :meth:`acquire`. `acquisition_fn` dictates which points should
         be chosen from the unlabelled pool.
 
-        :param labelled: training data with labelled points
-        :type labelled: :class:`~torch.utils.data.Dataset`
-        :param unlabelled: unlabelled pool
-        :type unlabelled: :class:`UnlabelledDataset`
-        :param acquisition_fn: acquisition function
-        :type acquisition_fn: :class:`~alr.acquisition.AcquisitionFunction`
+
+        Args:
+            labelled (:class:`~torch.utils.data.Dataset`): training data with labelled points
+            unlabelled (:class:`UnlabelledDataset`): unlabelled pool
+            acquisition_fn (:class:`~alr.acquisition.AcquisitionFunction`): acquisition function
         """
         self._old_labelled = labelled
         self._labelled = labelled
@@ -120,10 +120,11 @@ class DataManager:
         Acquire `b` points from the :attr:`unlabelled` dataset and adds
         it to the :attr:`labelled` dataset.
 
-        :param b: number of points to acquire at once
-        :type b: `int`
-        :return: None
-        :rtype: NoneType
+        Args:
+            b (int): number of points to acquire at once
+
+        Returns:
+            NoneType: None
         """
         assert b <= self.n_unlabelled
         idxs = self._a_fn(self._unlabelled, b)
@@ -139,8 +140,8 @@ class DataManager:
         r"""
         Current number of :attr:`labelled` points.
 
-        :return: size of dataset
-        :rtype: `int`
+        Returns:
+            int: size of dataset
         """
         return len(self._labelled)
 
@@ -149,8 +150,8 @@ class DataManager:
         r"""
         Current number of :attr:`unlabelled` points.
 
-        :return: size of dataset
-        :rtype: `int`
+        Returns:
+            int: size of dataset
         """
         return len(self._unlabelled)
 
@@ -159,8 +160,8 @@ class DataManager:
         r"""
         The current labelled dataset after considering previous acquisitions.
 
-        :return: labelled dataset
-        :rtype: :class:`torch.utils.data.Dataset`
+        Returns:
+            :class:`torch.utils.data.Dataset`: labelled dataset
         """
         return self._labelled
 
@@ -169,8 +170,8 @@ class DataManager:
         r"""
         The current unlabelled dataset after considering previous acquisitions.
 
-        :return: unlabelled dataset
-        :rtype: :class:`torch.utils.data.Dataset`
+        Returns:
+            :class:`torch.utils.data.Dataset`: unlabelled dataset
         """
         return self._unlabelled
 
@@ -179,8 +180,8 @@ class DataManager:
         Resets the state of this data manager. All acquired points are removed
         from the :attr:`labelled` dataset and added back into the :attr:`unlabelled` dataset.
 
-        :return: None
-        :rtype: NoneType
+        Returns:
+            NoneType: None
         """
         self._unlabelled.reset()
         self._labelled = self._old_labelled

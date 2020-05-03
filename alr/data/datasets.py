@@ -23,11 +23,8 @@ class Dataset(Enum):
     An enum class that provides convenient data retrieval.
 
     Example:
-
-    .. code:: python
-
-        train, test = Dataset.MNIST.get()
-        train_load = torch.utils.data.DataLoader(train, batch_size=32)
+        >>> train, test = Dataset.MNIST.get()
+        >>> train_load = torch.utils.data.DataLoader(train, batch_size=32)
     """
     MNIST = "MNIST"
     FashionMNIST = "FashionMNIST"
@@ -47,10 +44,11 @@ class Dataset(Enum):
         r"""
         Return (train, test) tuple of datasets.
 
-        :param root: root path where data will be read from or downloaded to
-        :type root: str, optional
-        :return: a 2-tuple of (train, test) datasets
-        :rtype: tuple
+        Args:
+            root (str, optional): root path where data will be read from or downloaded to
+
+        Returns:
+            tuple: a 2-tuple of (train, test) datasets
         """
         train_transform = transforms.Compose([
             transforms.ToTensor(),
@@ -83,8 +81,8 @@ class Dataset(Enum):
         Returns a tuple of channel mean and standard deviation of 0-1-scaled inputs.
         I.e. the input is assumed to be in the range of 0-1.
 
-        :return: a 2-tuple of mean and standard deviation
-        :rtype: `tuple`
+        Returns:
+            tuple: a 2-tuple of mean and standard deviation
         """
         params = {
             Dataset.MNIST: ((0.1307,), (0.3081,)),
@@ -108,10 +106,8 @@ class Dataset(Enum):
             * height
             * channels
 
-        See :class:`DataDescription`.
-
-        :return: information about this dataset
-        :rtype: :class:`DataDescription`
+        Returns:
+            :class:`DataDescription`: information about this dataset
         """
         params = {
             Dataset.MNIST: DataDescription(10, 28, 28, 1),

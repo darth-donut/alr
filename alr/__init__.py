@@ -240,21 +240,22 @@ class MCDropout(ALRModel):
                  apply_logsoft: bool,
                  forward: Optional[int] = 100,
                  inplace: Optional[bool] = True):
-        """
+        r"""
         Implements `Monte Carlo Dropout <https://arxiv.org/abs/1506.02142>`_ (MCD).
 
-        :param model: base `torch.nn.Module` object
-        :type model: `nn.Module`
-        :param apply_logsoft: if set to `True`, invoke log-softmax on :meth:`forward`,
+        Args:
+            model (`nn.Module`): base `torch.nn.Module` object
+            apply_logsoft (bool): if set to `True`, invoke log-softmax on :meth:`forward`,
                                 :meth:`stochastic_forward`, and :meth:`predict`'s outputs.
                                 This should be set to `False` if `model`
                                 already returns softmax/log-softmax scores.
-        :type apply_logsoft: bool
-        :param forward: number of stochastic forward passes
-        :type forward: int, optional
-        :param inplace: If `True`, the `model` is modified *in-place* when the dropout layers are
-                        replaced. If `False`, `model` is not modified and a new model is cloned.
-        :type inplace: `bool`, optional
+            forward (int, optional): number of stochastic forward passes
+            inplace (bool, optional): If `True`, the `model` is modified *in-place* when the dropout layers are
+                                        replaced. If `False`, `model` is not modified and a new model is cloned.
+
+        Attributes:
+              base_model (`nn.Module`): provided base model (a clone if `inplace=True`)
+              n_forward (int): number of forward passes (`forward`)
         """
         super(MCDropout, self).__init__()
         self.base_model = replace_dropout(model, inplace=inplace)
@@ -262,13 +263,14 @@ class MCDropout(ALRModel):
         self._activation = F.log_softmax if apply_logsoft else lambda x, dim: x
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
+        r"""
         Regular forward pass.
 
-        :param x: input tensor
-        :type x: `torch.Tensor`
-        :return: output tensor
-        :rtype: `torch.Tensor`
+        Args:
+            x (`torch.Tensor`): input tensor
+
+        Returns:
+            `torch.Tensor`: output tensor
         """
         return self._activation(self.base_model(x), dim=1)
 
@@ -283,26 +285,26 @@ class MCDropout(ALRModel):
             def predict(x):
                 return torch.mean(stochastic_forward(x), dim=0)
 
-        :param x: input tensor, any size
-        :type x: `torch.Tensor`
-        :return: output tensor of size :math:`N \times C` where :math:`N` is the
-                    batch size and :math:`C` is the number of target classes.
-        :rtype: `torch.Tensor`
+        Args:
+            x (`torch.Tensor`): input tensor, any size
+
+        Returns:
+            `torch.Tensor`: output tensor of size :math:`N \times C` where :math:`N` is the batch size and :math:`C` is the number of target classes.
         """
         return torch.mean(self.stochastic_forward(x), dim=0)
 
     def stochastic_forward(self, x: torch.Tensor) -> torch.Tensor:
         r"""
         Returns a :math:`m \times N \times C` `torch.Tensor` where:
-
             1. :math:`m` is equal to `self.n_forward`
             2. :math:`N` is the batch size, equal to `x.size(0)`
             3. :math:`C` is the number of units in the final layer (e.g. number of classes in a classification model)
 
-        :param x: input tensor
-        :type x: `torch.Tensor`
-        :return: output tensor of shape :math:`m \times N \times C`
-        :rtype: `torch.Tensor`
+        Args:
+            x (`torch.Tensor`): input tensor
+
+        Returns:
+            `torch.Tensor`: output tensor of shape :math:`m \times N \times C`
         """
         preds = torch.stack(
             [self._activation(self.base_model(x), dim=1) for _ in range(self.n_forward)]
