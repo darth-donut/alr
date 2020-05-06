@@ -1,5 +1,6 @@
 import inspect
 import types
+from datetime import timedelta
 from collections import namedtuple
 from contextlib import contextmanager, AbstractContextManager
 from dataclasses import dataclass
@@ -50,6 +51,11 @@ class Elapsed:
         if self.seconds is None:
             return None
         return self.hours / 24
+
+    def __repr__(self):
+        if self.seconds is None:
+            return "None"
+        return str(timedelta(seconds=self.seconds))
 
 
 @contextmanager
