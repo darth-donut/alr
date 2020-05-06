@@ -1,5 +1,4 @@
 import inspect
-import sys
 import types
 from collections import namedtuple
 from contextlib import contextmanager, AbstractContextManager
@@ -30,6 +29,27 @@ def progress_bar(*args, **kwargs):
 class Elapsed:
     """Elapsed time in seconds"""
     seconds: Optional[float] = None
+
+    @property
+    def minutes(self):
+        r"""Elapsed time in minutes"""
+        if self.seconds is None:
+            return None
+        return self.seconds / 60
+
+    @property
+    def hours(self):
+        r"""Elapsed time in hours"""
+        if self.seconds is None:
+            return None
+        return self.minutes / 60
+
+    @property
+    def days(self):
+        r"""Elapsed time in days"""
+        if self.seconds is None:
+            return None
+        return self.hours / 24
 
 
 @contextmanager
