@@ -89,9 +89,6 @@ class ALRModel(nn.Module, ABC):
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         """
         Override this function if predict has a different behaviour from :meth:`forward`.
-        For example, if :meth:`forward` returns logits, this function could augment the
-        output with softmax. Another example would be if the base model is a :class:`MCDropout` model,
-        in which case, this function should return multiple stochastic forward passes.
 
         :param x: input tensor
         :type x: `torch.Tensor`
@@ -271,38 +268,34 @@ class MCDropout(ALRModel):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         r"""
-        Regular forward pass.
-
-        Args:
-            x (`torch.Tensor`): input tensor
-
-        Returns:
-            `torch.Tensor`: output tensor
-        """
-        return self._activation(self.base_model(x), dim=1)
-
-    def predict(self, x: torch.Tensor) -> torch.Tensor:
-        r"""
-        Returns the mean score of :meth:`stochastic_forward` passes.
-
-        Equivalent to:
+        Forward pass. *Note, this function has a different behaviour in eval mode*.
+        It returns the mean score of :meth:`stochastic_forward` passes. In other words,
+        if `self.training` is `False`, the following is returned instead:
 
         .. code:: python
 
-            def predict(x):
-                return torch.mean(stochastic_forward(x), dim=0)
+            torch.mean(self.stochastic_forward(x), dim=0)
 
         Args:
             x (`torch.Tensor`): input tensor, any size
 
         Returns:
-            `torch.Tensor`: output tensor of size :math:`N \times C` where :math:`N` is the batch size and :math:`C` is the number of target classes.
+            `torch.Tensor`:
+                output tensor of size :math:`N \times C` where
+                :math:`N` is the batch size and :math:`C` is the number of target classes.
+
+        Note:
+              if a single forward pass is required during eval mode, one could use the following
+              instead: `base_model(x)`
         """
+        if self.training:
+            return self._activation(self.base_model(x), dim=1)
         return torch.mean(self.stochastic_forward(x), dim=0)
 
     def stochastic_forward(self, x: torch.Tensor) -> torch.Tensor:
         r"""
         Returns a :math:`m \times N \times C` `torch.Tensor` where:
+
             1. :math:`m` is equal to `self.n_forward`
             2. :math:`N` is the batch size, equal to `x.size(0)`
             3. :math:`C` is the number of units in the final layer (e.g. number of classes in a classification model)
