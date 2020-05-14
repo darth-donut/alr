@@ -85,25 +85,15 @@ def test_mcd_eval_forward():
 
 
 def test_mcd_eval_forward_consistent_with_predict():
-    # regardless of model's mode, predict should have the same behaviour as forward
+    # when model's in eval, predict should have the same behaviour as forward
     model = MCDropout(Net1(), output_transform=lambda x: F.log_softmax(x, dim=-1), forward=10)
     model.eval()
     input = torch.randn(size=(12309, 10))
     torch.manual_seed(42)
     output = model(input).exp_()
     torch.manual_seed(42)
-    output2 = model.predict(input).exp_()
-    assert torch.allclose(output, output2)
-
-
-def test_mcd_train_forward_consistent_with_predict():
-    # regardless of model's mode, predict should have the same behaviour as forward
-    model = MCDropout(Net1(), output_transform=lambda x: F.log_softmax(x, dim=-1), forward=10)
+    # model.predict overrides model.train() with .eval()
     model.train()
-    input = torch.randn(size=(12309, 10))
-    torch.manual_seed(42)
-    output = model(input).exp_()
-    torch.manual_seed(42)
     output2 = model.predict(input).exp_()
     assert torch.allclose(output, output2)
 
@@ -155,3 +145,93 @@ def test_mcd_fast_stochastic_fwd_img_data():
     # if the same dropout2d mask was used for each item in the batch, then
     # the variance wouldn't be 0
     assert (preds.var(dim=0) > 1e-3).all()
+
+
+def test_mc_dropout_fast_img_data(benchmark):
+    class Net(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.conv1 = nn.Conv2d(3, 32, 5)
+            # 32 24 24
+            self.dropout1 = nn.Dropout2d()
+            # maxpool --
+            # 32 12 12
+            self.conv2 = nn.Conv2d(32, 64, 5)
+            # 64 8 8
+            self.dropout2 = nn.Dropout2d()
+            # maxpool --
+            # 64 4 4
+            self.fc1 = nn.Linear(64 * 4 * 4, 128)
+            self.fc2 = nn.Linear(128, 10)
+
+        def forward(self, x):
+            x = F.max_pool2d(self.dropout1(F.relu(self.conv1(x))), 2)
+            x = F.max_pool2d(self.dropout2(F.relu(self.conv2(x))), 2)
+            x = x.view(-1, 64 * 4 * 4)
+            x = self.fc2(F.relu(self.fc1(x)))
+            return F.log_softmax(x, dim=1)
+
+    img = torch.from_numpy(np.random.normal(size=(32, 3, 28, 28))).float()
+
+    def fast():
+        net = MCDropout(Net(), forward=20, fast=True)
+        with torch.no_grad():
+            net.stochastic_forward(img)
+
+    benchmark(fast)
+
+
+def test_mc_dropout_regular_img_data(benchmark):
+    class Net(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.conv1 = nn.Conv2d(3, 32, 5)
+            # 32 24 24
+            self.dropout1 = nn.Dropout2d()
+            # maxpool --
+            # 32 12 12
+            self.conv2 = nn.Conv2d(32, 64, 5)
+            # 64 8 8
+            self.dropout2 = nn.Dropout2d()
+            # maxpool --
+            # 64 4 4
+            self.fc1 = nn.Linear(64 * 4 * 4, 128)
+            self.fc2 = nn.Linear(128, 10)
+
+        def forward(self, x):
+            x = F.max_pool2d(self.dropout1(F.relu(self.conv1(x))), 2)
+            x = F.max_pool2d(self.dropout2(F.relu(self.conv2(x))), 2)
+            x = x.view(-1, 64 * 4 * 4)
+            x = self.fc2(F.relu(self.fc1(x)))
+            return F.log_softmax(x, dim=1)
+
+    img = torch.from_numpy(np.random.normal(size=(32, 3, 28, 28))).float()
+
+    def regular():
+        net = MCDropout(Net(), forward=20, fast=False)
+        with torch.no_grad():
+            net.stochastic_forward(img)
+
+    benchmark(regular)
+
+
+def test_mc_dropout_fast_flat_data(benchmark):
+    data = torch.from_numpy(np.random.normal(size=(32, 10))).float()
+
+    def fast():
+        net = MCDropout(Net2(), forward=50, fast=True)
+        with torch.no_grad():
+            net.stochastic_forward(data)
+
+    benchmark(fast)
+
+
+def test_mc_dropout_regular_flat_data(benchmark):
+    data = torch.from_numpy(np.random.normal(size=(32, 10))).float()
+
+    def regular():
+        net = MCDropout(Net2(), forward=50, fast=False)
+        with torch.no_grad():
+            net.stochastic_forward(data)
+
+    benchmark(regular)
