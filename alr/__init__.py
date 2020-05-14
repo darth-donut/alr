@@ -88,13 +88,14 @@ class ALRModel(nn.Module, ABC):
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Override this function if predict has a different behaviour from :meth:`forward`.
+        Sets the model mode to eval and calls forward.
 
         :param x: input tensor
         :type x: `torch.Tensor`
         :return: output tensor
         :rtype: `torch.Tensor`
         """
+        self.eval()
         return self(x)
 
     def reset_weights(self) -> None:
