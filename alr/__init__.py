@@ -18,7 +18,7 @@ from alr.acquisition import AcquisitionFunction
 from alr.modules.dropout import replace_dropout
 from alr.utils import _DeviceType, range_progress_bar, progress_bar
 
-__version__ = '0.0.0b7'
+__version__ = '0.0.0b8'
 
 
 @dataclass
