@@ -319,7 +319,7 @@ class MCDropout(ALRModel):
         if self._fast:
             size = x.size()
             x = self._repeat_n(x, self.n_forward)
-            assert x.size == (size[0] * self.n_forward, *size[1:])
+            assert x.size() == (size[0] * self.n_forward, *size[1:])
             try:
                 preds = self._output_transform(self.base_model(x))
                 preds = preds.view(self.n_forward, -1, *preds.size()[1:])
