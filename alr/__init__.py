@@ -241,21 +241,23 @@ class ALRModel(nn.Module, ABC):
 
 class MCDropout(ALRModel):
     def __init__(self, model: nn.Module,
-                 apply_logsoft: bool,
                  forward: Optional[int] = 100,
-                 inplace: Optional[bool] = True):
+                 inplace: Optional[bool] = True,
+                 output_transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None):
         r"""
-        Implements `Monte Carlo Dropout <https://arxiv.org/abs/1506.02142>`_ (MCD).
+        A wrapper that turns a regular PyTorch module into one that implements
+        `Monte Carlo Dropout <https://arxiv.org/abs/1506.02142>`_ (Gal & Ghahramani, 2016).
 
         Args:
-            model (`nn.Module`): base `torch.nn.Module` object
-            apply_logsoft (bool): if set to `True`, invoke log-softmax on :meth:`forward`,
-                                :meth:`stochastic_forward`, and :meth:`predict`'s outputs.
-                                This should be set to `False` if `model`
-                                already returns softmax/log-softmax scores.
+            model (`nn.Module`): `torch.nn.Module` object. This model's forward pass
+                                  should return (log) probabilities. I.e. the final layer should
+                                  be `softmax` or `log_softmax`. Otherwise, `output_transform` can
+                                  be used to convert `model`'s output into probabilities.
             forward (int, optional): number of stochastic forward passes
             inplace (bool, optional): If `True`, the `model` is modified *in-place* when the dropout layers are
                                         replaced. If `False`, `model` is not modified and a new model is cloned.
+            output_transform (callable, optional): model's output is given as input and the output of this
+                                                    callable is expected to return (log) probabilities.
 
         Attributes:
               base_model (`nn.Module`): provided base model (a clone if `inplace=True`)
@@ -264,7 +266,7 @@ class MCDropout(ALRModel):
         super(MCDropout, self).__init__()
         self.base_model = replace_dropout(model, inplace=inplace)
         self.n_forward = forward
-        self._activation = F.log_softmax if apply_logsoft else lambda x, dim: x
+        self._output_transform = output_transform if output_transform is not None else lambda x: x
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         r"""
@@ -289,7 +291,7 @@ class MCDropout(ALRModel):
               instead: `base_model(x)`
         """
         if self.training:
-            return self._activation(self.base_model(x), dim=1)
+            return self._output_transform(self.base_model(x))
         return torch.mean(self.stochastic_forward(x), dim=0)
 
     def stochastic_forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -307,7 +309,7 @@ class MCDropout(ALRModel):
             `torch.Tensor`: output tensor of shape :math:`m \times N \times C`
         """
         preds = torch.stack(
-            [self._activation(self.base_model(x), dim=1) for _ in range(self.n_forward)]
+            [self._output_transform(self.base_model(x)) for _ in range(self.n_forward)]
         )
         assert preds.size(0) == self.n_forward
         return preds
