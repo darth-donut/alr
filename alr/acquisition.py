@@ -44,7 +44,6 @@ class RandomAcquisition(AcquisitionFunction):
 
 class BALD(AcquisitionFunction):
     def __init__(self, pred_fn: _BayesianCallable,
-                 exp: Optional[bool] = False,
                  subset: Optional[int] = -1,
                  device: _DeviceType = None,
                  **data_loader_params):
@@ -65,7 +64,7 @@ class BALD(AcquisitionFunction):
         .. code:: python
 
             model = MCDropout(...)
-            bald = BALD(model.stochastic_forward, subset=-1, device=device,
+            bald = BALD(eval_fwd_exp(model), subset=-1, device=device,
                         batch_size=512, pin_memory=True,
                         num_workers=2)
             bald(X_pool, b=10)
@@ -75,9 +74,8 @@ class BALD(AcquisitionFunction):
                         :math:`K` is the number of inference samples,
                         :math:`N` is the number of instances,
                         and :math:`C` is the number of classes.
+                        **This function should return probabilities, not *log* probabilities!**
         :type pred_fn: `Callable`
-        :param exp: if `pred_fn` returns log probabilities, set this to `True`.
-        :type exp: bool, optional
         :param subset: Size of the subset of `X_pool`. Use -1 to denote the entire pool.
         :type subset: int, optional
         :param device: Move data to specified device when passing input data into `pred_fn`.
@@ -89,7 +87,7 @@ class BALD(AcquisitionFunction):
             Do not set `shuffle=True` in `data_loader_params`! The indices will be
             incorrect if the `DataLoader` object shuffles `X_pool`!
         """
-        self._pred_fn = pred_fn if not exp else lambda x: pred_fn(x).exp_()
+        self._pred_fn = pred_fn
         self._device = device
         self._subset = subset
         self._dl_params = data_loader_params
@@ -122,7 +120,6 @@ class BALD(AcquisitionFunction):
 
 class ICAL(AcquisitionFunction):
     def __init__(self, pred_fn: _BayesianCallable,
-                 exp: Optional[bool] = False,
                  kernel_fn: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
                  subset: Optional[int] = 200,
                  greedy_acquire: Optional[int] = 1,
@@ -143,7 +140,7 @@ class ICAL(AcquisitionFunction):
         .. code:: python
 
             model = MCDropout(...)
-            ical = ICAL(model.stochastic_forward, device=device,
+            ical = ICAL(eval_fwd_exp(model), device=device,
                         batch_size=512,
                         pin_memory=True, num_workers=2)
             ical(X_pool, b=10)
@@ -152,9 +149,8 @@ class ICAL(AcquisitionFunction):
                         :math:`K` is the number of inference samples,
                         :math:`N` is the number of instances,
                         and :math:`C` is the number of classes.
+                        **This function should return probabilities, not *log* probabilities!**
         :type pred_fn: `Callable`
-        :param exp: if `pred_fn` returns log probabilities, set this to `True`.
-        :type exp: bool, optional
         :param kernel_fn: Kernel function, see static methods of :class:`ICAL`. Defaults to
             weighted a rational quadratic kernel. This is the default kernel in the paper.
         :type kernel_fn: Callable[[torch.Tensor], torch.Tensor]], optional
@@ -181,7 +177,7 @@ class ICAL(AcquisitionFunction):
             incorrect if the `DataLoader` object shuffles `X_pool`!
         """
         self._r = subset
-        self._pred_fn = pred_fn if not exp else lambda x: pred_fn(x).exp_()
+        self._pred_fn = pred_fn
         self._dl_params = data_loader_params
         self._device = device
         self._l = greedy_acquire

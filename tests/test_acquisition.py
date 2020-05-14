@@ -30,7 +30,6 @@ def test_BALD_best_case():
             return torch.softmax(torch.randn(size=(n_forward, x.size(0), n_classes)), dim=-1)
     bald = BALD(
         pred_fn=pred_fn,
-        exp=False,
         device='cpu',
         batch_size=1,
     )
@@ -56,7 +55,6 @@ def test_BALD_worst_case():
             return torch.stack([arr.clone() for _ in range(x.size(0))], dim=1)
     bald = BALD(
         pred_fn=pred_fn,
-        exp=False,
         device='cpu',
         batch_size=1,
     )

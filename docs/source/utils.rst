@@ -66,3 +66,15 @@ Functions
 .. autofunction:: stratified_partition
 
 
+:hidden:`eval_fwd_exp`
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: eval_fwd_exp
+
+
+:hidden:`eval_fwd`
+~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: eval_fwd
+
+
