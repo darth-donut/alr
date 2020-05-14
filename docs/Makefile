@@ -10,7 +10,11 @@ BUILDDIR      = build
 
 .PHONY: all
 all:
-	@cd ../ && omg -o docs/source/ -ov alr
+	@make clean html
+
+.PHONY: omg
+omg:
+	@cd ../ && omg -o docs/source/ --ignore alr/utils -ov alr
 	@make clean html
 
 # Put it first so that "make" without argument is like "make help".

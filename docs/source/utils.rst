@@ -11,59 +11,32 @@ Classses
 ---------
 
 
-:hidden:`Elapsed`
-~~~~~~~~~~~~~~~~~
-
-.. autoclass:: Elapsed
-    :members:
-    :undoc-members:
-    :show-inheritance:
-    
-
-
 :hidden:`Time`
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: Time
     :members:
     :undoc-members:
     :show-inheritance:
-    
 
+
+:hidden:`Elapsed`
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: Elapsed
+    :members:
+    :undoc-members:
+    :show-inheritance:
 
 
 Functions
 ---------
 
 
-:hidden:`range_progress_bar`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+:hidden:`manual_seed`
+~~~~~~~~~~~~~~~~~~~~~
 
-.. autofunction:: range_progress_bar
-
-
-:hidden:`progress_bar`
-~~~~~~~~~~~~~~~~~~~~~~
-
-.. autofunction:: progress_bar
-
-
-:hidden:`timeop`
-~~~~~~~~~~~~~~~~
-
-.. autofunction:: timeop
-
-
-:hidden:`time_this`
-~~~~~~~~~~~~~~~~~~~
-
-.. autofunction:: time_this
-
-
-:hidden:`stratified_partition`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autofunction:: stratified_partition
+.. autofunction:: manual_seed
 
 
 :hidden:`eval_fwd_exp`
@@ -73,8 +46,20 @@ Functions
 
 
 :hidden:`eval_fwd`
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: eval_fwd
 
 
+
+:hidden:`timeop`
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: timeop
+
+
+
+:hidden:`time_this`
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: time_this
