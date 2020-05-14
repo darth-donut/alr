@@ -113,7 +113,7 @@ class ALRModel(nn.Module, ABC):
         super(ALRModel, self).__setattr__(key, value)
         if isinstance(value, nn.Module):
             # register nn.Module
-            self._models.append((value, value.state_dict()))
+            self._models.append((value, copy.deepcopy(value.state_dict())))
 
     def compile(self, criterion: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
                 optimiser: torch.optim.Optimizer) -> None:

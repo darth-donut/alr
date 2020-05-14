@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import copy
 
 from alr import MCDropout
 from torch import nn
@@ -145,6 +146,45 @@ def test_mcd_fast_stochastic_fwd_img_data():
     # if the same dropout2d mask was used for each item in the batch, then
     # the variance wouldn't be 0
     assert (preds.var(dim=0) > 1e-3).all()
+
+
+def test_ALRModel_reset_weights():
+    class A(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.w = nn.Linear(10, 2)
+
+        def forward(self, x):
+            return F.log_softmax(self.w(x), dim=-1)
+
+    data = torch.from_numpy(np.random.normal(size=(32, 10))).float()
+    targets = torch.from_numpy(np.random.randint(0, 2, size=(32,)))
+    net = MCDropout(A())
+
+    optim = torch.optim.Adam(net.parameters())
+    store = copy.deepcopy(net.state_dict())
+
+    # train model to change weights
+    for _ in range(50):
+        preds = net(data)
+        loss = F.nll_loss(preds, targets)
+        optim.zero_grad()
+        loss.backward()
+        optim.step()
+
+    # weights shouldn't be the same after they're trained
+    with torch.no_grad():
+        for k, v in net.state_dict().items():
+            assert isinstance(v, torch.Tensor)
+            assert (torch.abs(v - store[k]) > 1e-4).all()
+
+    # reset weights
+    net.reset_weights()
+
+    # make sure weights are reset
+    for k, v in net.state_dict().items():
+        assert isinstance(v, torch.Tensor)
+        assert torch.allclose(v, store[k])
 
 
 def test_mc_dropout_fast_img_data(benchmark):
