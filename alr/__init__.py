@@ -243,7 +243,8 @@ class MCDropout(ALRModel):
     def __init__(self, model: nn.Module,
                  forward: Optional[int] = 100,
                  inplace: Optional[bool] = True,
-                 output_transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None):
+                 output_transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+                 fast: Optional[bool] = False):
         r"""
         A wrapper that turns a regular PyTorch module into one that implements
         `Monte Carlo Dropout <https://arxiv.org/abs/1506.02142>`_ (Gal & Ghahramani, 2016).
@@ -258,6 +259,9 @@ class MCDropout(ALRModel):
                                         replaced. If `False`, `model` is not modified and a new model is cloned.
             output_transform (callable, optional): model's output is given as input and the output of this
                                                     callable is expected to return (log) probabilities.
+            fast (bool): If true, :meth:`stochastic_forward` will stack the batch dimension for faster
+                          MC dropout passes. If false, then forward passes are called in a for-loop. Note,
+                          the former will consume (`forward`) more memory.
 
         Attributes:
               base_model (`nn.Module`): provided base model (a clone if `inplace=True`)
@@ -267,6 +271,7 @@ class MCDropout(ALRModel):
         self.base_model = replace_dropout(model, inplace=inplace)
         self.n_forward = forward
         self._output_transform = output_transform if output_transform is not None else lambda x: x
+        self._fast = fast
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         r"""
@@ -307,9 +312,48 @@ class MCDropout(ALRModel):
 
         Returns:
             `torch.Tensor`: output tensor of shape :math:`m \times N \times C`
+
+        Raises:
+            RuntimeError: Occurs when the machine runs out of memory and `fast` was set to true.
         """
-        preds = torch.stack(
-            [self._output_transform(self.base_model(x)) for _ in range(self.n_forward)]
-        )
+        if self._fast:
+            size = x.size()
+            x = self._repeat_n(x, self.n_forward)
+            assert x.size == (size[0] * self.n_forward, *size[1:])
+            try:
+                preds = self._output_transform(self.base_model(x))
+                preds = preds.view(self.n_forward, -1, *preds.size()[1:])
+            except RuntimeError as e:
+                raise RuntimeError(r"Ran out of memory. Try reducing batch size or"
+                                   "reducing the number of MC dropout samples. Alternatively, switch off"
+                                   "fast MC dropout.") from e
+        else:
+            preds = torch.stack(
+                [self._output_transform(self.base_model(x)) for _ in range(self.n_forward)]
+            )
         assert preds.size(0) == self.n_forward
         return preds
+
+    @staticmethod
+    def _repeat_n(x: torch.Tensor, n: int) -> torch.Tensor:
+        r"""
+        Repeat the data in x `n` times along the batch dimension.
+
+        Args:
+            x (torch.Tensor): input tensor, the batch dimension is assumed to be 0.
+            n (int): number of repeats
+
+        Returns:
+            torch.Tensor: output tensor
+
+        Raises:
+            RuntimeError: Occurs when the machine runs out of memory.
+        """
+        try:
+            out = x.repeat(n, *([1] * (x.ndim - 1)))
+        except RuntimeError as e:
+            raise RuntimeError(r"Ran out of memory. Try reducing batch size or"
+                               "reducing the number of MC dropout samples. Alternatively, switch off"
+                               "fast MC dropout.") from e
+        return out
+
