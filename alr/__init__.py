@@ -95,7 +95,7 @@ class ALRModel(nn.Module, ABC):
         :return: output tensor
         :rtype: `torch.Tensor`
         """
-        return self.forward(x)
+        return self(x)
 
     def reset_weights(self) -> None:
         """
