@@ -107,7 +107,10 @@ class DataManager:
 
         The :attr:`labelled` and :attr:`unlabelled` datasets are updated according to the points
         acquired by :meth:`acquire`. `acquisition_fn` dictates which points should
-        be chosen from the unlabelled pool.
+        be chosen from the unlabelled pool. Similar to :class:`UnlabelledDataset`, the original
+        dataset, `labelled`, will *not* be modified as this class provides a *logical* abstraction.
+        Whilst `unlabelled` is modified, the dataset that it is providing an abstraction over is not
+        (see :class:`UnlabelledDataset`).
 
 
         Args:
