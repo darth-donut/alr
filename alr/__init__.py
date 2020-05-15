@@ -71,7 +71,7 @@ class ALRModel(nn.Module, ABC):
         operations in active learning experiments.
         """
         super(ALRModel, self).__init__()
-        self._models = []
+        self._snapshot = None
         self._compile_params = None
 
     @abstractmethod
@@ -100,20 +100,23 @@ class ALRModel(nn.Module, ABC):
 
     def reset_weights(self) -> None:
         """
-        Resets the model's weights.
+        Resets the model's weights to the last saved snapshot.
 
         :return: None
         :rtype: NoneType
         """
-        for m, state in self._models:
-            # reload initial states
-            m.load_state_dict(state, strict=True)
+        assert self._snapshot is not None, "Snapshot was never taken"
+        self.load_state_dict(self._snapshot, strict=True)
 
-    def __setattr__(self, key, value):
-        super(ALRModel, self).__setattr__(key, value)
-        if isinstance(value, nn.Module):
-            # register nn.Module
-            self._models.append((value, copy.deepcopy(value.state_dict())))
+    def snap(self) -> None:
+        r"""
+        Take and store a snapshot of the current state.
+
+        Returns:
+            NoneType: None
+        """
+        # update snapshot
+        self._snapshot = copy.deepcopy(self.state_dict())
 
     def compile(self, criterion: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
                 optimiser: torch.optim.Optimizer) -> None:
@@ -273,6 +276,7 @@ class MCDropout(ALRModel):
         self.n_forward = forward
         self._output_transform = output_transform if output_transform is not None else lambda x: x
         self._fast = fast
+        self.snap()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         r"""
