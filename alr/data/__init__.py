@@ -13,6 +13,8 @@ class UnlabelledDataset(torchdata.Dataset):
         r"""
         A wrapper class to manage the unlabelled `dataset` by providing a simple
         interface to :meth:`label` specific points and remove from the underlying dataset.
+        Note that it doesn't physically remove points from `dataset`, but rather provide
+        an abstraction over it to *logically* remove them.
         Furthermore, if the `label_fn` is not provided, this class automatically infers that
         the provided "unlabelled" dataset is, in fact, labelled. This is especially for
         benchmarking studies!
@@ -33,7 +35,10 @@ class UnlabelledDataset(torchdata.Dataset):
     def label(self, idxs: Sequence[int]) -> torchdata.Dataset:
         r"""
         Label and return points specified by `idxs` according to provided `label_fn`.
-        These labelled points will no longer be part of this dataset.
+        These labelled points will no longer be part of this dataset. Note, however,
+        that this is just an abstraction and the original provided dataset in the constructor
+        will *not* be modified. In other words, the dataset will not *lose* points
+        as a result of being labelled.
 
         Args:
             idxs (`Sequence[int]`): indices of points to label
