@@ -3,6 +3,7 @@ Main alr module
 """
 
 import copy
+import math
 from abc import ABC, abstractmethod
 from collections import namedtuple
 from dataclasses import dataclass
@@ -12,7 +13,7 @@ import numpy as np
 import torch
 import torch.utils.data as torchdata
 from torch import nn
-from torch.nn import functional as F
+
 
 from alr.acquisition import AcquisitionFunction
 from alr.modules.dropout import replace_dropout
@@ -246,6 +247,7 @@ class ALRModel(nn.Module, ABC):
 class MCDropout(ALRModel):
     def __init__(self, model: nn.Module,
                  forward: Optional[int] = 100,
+                 reduce: Optional[str] = 'logsumexp',
                  inplace: Optional[bool] = True,
                  output_transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
                  fast: Optional[bool] = False):
@@ -259,11 +261,16 @@ class MCDropout(ALRModel):
                                   be `softmax` or `log_softmax`. Otherwise, `output_transform` can
                                   be used to convert `model`'s output into probabilities.
             forward (int, optional): number of stochastic forward passes
-            inplace (bool, optional): If `True`, the `model` is modified *in-place* when the dropout layers are
+            reduce (str, optional): either `"logsumexp"` or `"mean"`. This is used to reduce the
+                n `forward` stochastic passes during evaluation. If `model` or `output_transform`
+                returns probabilities (i.e. `F.softmax`), this should be `"mean"`;
+                otherwise it should be "logsumexp" if they return log-probabilities (i.e. `F.log_softmax`).
+                [default = `"logsumexp"`]
+            inplace (bool, optional): if `True`, the `model` is modified *in-place* when the dropout layers are
                                         replaced. If `False`, `model` is not modified and a new model is cloned.
             output_transform (callable, optional): model's output is given as input and the output of this
                                                     callable is expected to return (log) probabilities.
-            fast (bool): If true, :meth:`stochastic_forward` will stack the batch dimension for faster
+            fast (bool): if true, :meth:`stochastic_forward` will stack the batch dimension for faster
                           MC dropout passes. If false, then forward passes are called in a for-loop. Note,
                           the former will consume (`forward`) more memory.
 
@@ -275,18 +282,25 @@ class MCDropout(ALRModel):
         self.base_model = replace_dropout(model, inplace=inplace)
         self.n_forward = forward
         self._output_transform = output_transform if output_transform is not None else lambda x: x
+        self._reduce = reduce.lower()
+        assert self._reduce in {"logsumexp", "mean"}
         self._fast = fast
         self.snap()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         r"""
         Forward pass. *Note, this function has a different behaviour in eval mode*.
-        It returns the mean score of :meth:`stochastic_forward` passes. In other words,
+        It returns the (log) mean score of :meth:`stochastic_forward` passes. In other words,
         if `self.training` is `False`, the following is returned instead:
 
         .. code:: python
 
+            # if reduce = "logsumexp"
+            torch.logsumexp(self.stochastic_forward(x), dim=0) - log(self.n_forward)
+
+            # if reduce = "mean"
             torch.mean(self.stochastic_forward(x), dim=0)
+
 
         Args:
             x (`torch.Tensor`): input tensor, any size
@@ -302,7 +316,10 @@ class MCDropout(ALRModel):
         """
         if self.training:
             return self._output_transform(self.base_model(x))
-        return torch.mean(self.stochastic_forward(x), dim=0)
+        if self._reduce == "mean":
+            return torch.mean(self.stochastic_forward(x), dim=0)
+        # if self._reduce == "logsumexp"
+        return torch.logsumexp(self.stochastic_forward(x), dim=0) - math.log(self.n_forward)
 
     def stochastic_forward(self, x: torch.Tensor) -> torch.Tensor:
         r"""

@@ -73,16 +73,21 @@ def test_mcd_stochastic_fwd_wo_logsoft():
     assert torch.allclose(output, torch.ones_like(output))
 
 
-def test_mcd_eval_forward():
-    # since eval implies that forward will return averaged scores, it's
-    # not going to sum to one.
-    model = MCDropout(Net1(), output_transform=lambda x: F.log_softmax(x, dim=-1), forward=10)
+def test_mcd_eval_forward_logsumexp():
+    # using log_softmax
+    model = MCDropout(Net1(), reduce='logsumexp',
+                      output_transform=lambda x: F.log_softmax(x, dim=-1), forward=10)
     model.eval()
     output = model(torch.randn(size=(12309, 10))).exp_().sum(dim=-1)
-    # if we're taking the mean of 10 forward passes, it shouldn't sum to one
-    # of course, it could, but given an untrained Net1 with high dropout
-    # probability and 10 hidden units, it's extremely unlikely
-    assert not torch.allclose(output, torch.ones_like(output))
+    assert torch.allclose(output, torch.ones_like(output))
+
+
+def test_mcd_eval_forward_mean():
+    # using softmax
+    model = MCDropout(Net1(), reduce='mean', output_transform=lambda x: F.softmax(x, dim=-1), forward=10)
+    model.eval()
+    output = model(torch.randn(size=(12309, 10))).sum(dim=-1)
+    assert torch.allclose(output, torch.ones_like(output))
 
 
 def test_mcd_eval_forward_consistent_with_predict():
