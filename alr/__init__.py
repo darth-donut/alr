@@ -107,7 +107,7 @@ class ALRModel(nn.Module, ABC):
         """
         for m, state in self._models:
             # reload initial states
-            m.load_state_dict(state)
+            m.load_state_dict(state, strict=True)
 
     def __setattr__(self, key, value):
         super(ALRModel, self).__setattr__(key, value)
