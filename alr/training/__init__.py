@@ -14,9 +14,10 @@ from typing import Optional, Callable, Dict, Sequence
 
 r"""
 Checklist:
-1. basic trainer + evaluator function
-2. early stopping + validation set
-3. Pseudo-labelling trainer
+1. basic trainer + evaluator function DONE
+2. early stopping + validation set DONE
+3. return best model after early stopping has kicked in (or not, just return best)
+4. Pseudo-labelling trainer
 """
 
 
@@ -47,20 +48,19 @@ class Trainer:
                         save_to: Optional[Dict[str, list]] = None,
                         handlers: Optional[Dict[Events, Callable]] = {}):
             metrics = self.evaluate(model, data_loader, handlers)
-            if save_to:
+            if save_to is not None:
                 save_to[f"{dtype}_acc"].append(metrics['acc'])
                 save_to[f"{dtype}_loss"].append(metrics['loss'])
-            else:
-                pbar.log_message(
-                    f"Iter {engine.state.iteration}, "
-                    f"epoch {engine.state.epoch}/{engine.state.max_epochs}, "
-                    f"{dtype} acc = {metrics['acc']}, {dtype} loss = {metrics['loss']}"
-                )
+            pbar.log_message(
+                # f"Iter {engine.state.iteration}, "
+                f"epoch {engine.state.epoch}/{engine.state.max_epochs}, "
+                f"{dtype} acc = {metrics['acc']}, {dtype} loss = {metrics['loss']}"
+            )
 
-        trainer.add_event_handler(
-            Events.ITERATION_COMPLETED(every=100),
-            log_metrics, data_loader=train_loader, dtype="train"
-        )
+        # trainer.add_event_handler(
+        #     Events.ITERATION_COMPLETED(every=200),
+        #     log_metrics, data_loader=train_loader, dtype="train"
+        # )
         trainer.add_event_handler(
             Events.EPOCH_COMPLETED,
             log_metrics, data_loader=train_loader,
@@ -79,10 +79,10 @@ class Trainer:
                 )
                 handler[Events.COMPLETED] = es_handler
 
-            trainer.add_event_handler(
-                Events.ITERATION_COMPLETED(every=100),
-                log_metrics, data_loader=val_loader, dtype="val"
-            )
+            # trainer.add_event_handler(
+            #     Events.ITERATION_COMPLETED(every=200),
+            #     log_metrics, data_loader=val_loader, dtype="val"
+            # )
             trainer.add_event_handler(
                 Events.EPOCH_COMPLETED,
                 log_metrics, data_loader=val_loader,
