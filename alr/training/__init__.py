@@ -1,10 +1,12 @@
 import torch
+import tempfile
+from pathlib import Path
 from torch import nn
 from ignite.engine import Engine, Events,\
     create_supervised_evaluator, create_supervised_trainer
 from ignite.metrics import Loss, Accuracy
 import torch.utils.data as torchdata
-from ignite.handlers import EarlyStopping
+from ignite.handlers import EarlyStopping, Checkpoint, global_step_from_engine, DiskSaver
 from ignite.contrib.handlers import ProgressBar
 import numpy as np
 
@@ -30,46 +32,57 @@ class Trainer:
     def fit(self,
             model: nn.Module,
             train_loader: torchdata.DataLoader,
-            val_loader: Optional[torchdata.DataLoader],
+            val_loader: Optional[torchdata.DataLoader] = None,
             epochs: Optional[int] = 1,
-            early_stopping: Optional[int] = None) -> Dict[str, list]:
+            early_stopping: Optional[int] = None,
+            reload_best: Optional[bool] = False) -> Dict[str, list]:
         assert early_stopping is None or early_stopping > 0
 
+        pbar = ProgressBar()
+        history = defaultdict(list)
+
+        def _epoch_end_callback(engine: Engine, val_handlers={}):
+            # train loader - save to history and print metrics
+            metrics = self.evaluate(model, train_loader)
+            history[f"train_acc"].append(metrics['acc'])
+            history[f"train_loss"].append(metrics['loss'])
+            pbar.log_message(
+                f"epoch {engine.state.epoch}/{engine.state.max_epochs}, "
+                f"train acc = {metrics['acc']}, train loss = {metrics['loss']}"
+            )
+
+            if val_loader is None:
+                return  # job done
+
+            # val loader - save to history and print metrics. Also, add handlers to
+            # evaluator (e.g. early stopping, model checkpointing that depend on val_acc)
+            evaluator = create_supervised_evaluator(
+                model, metrics={'acc': Accuracy(), 'loss': Loss(self._loss)},
+                device=self._device
+            )
+            for e, hs in val_handlers.items():
+                for h in hs:
+                    evaluator.add_event_handler(e, h)
+
+            metrics = evaluator.run(val_loader).metrics
+
+            history[f"val_acc"].append(metrics['acc'])
+            history[f"val_loss"].append(metrics['loss'])
+            pbar.log_message(
+                f"epoch {engine.state.epoch}/{engine.state.max_epochs}, "
+                f"val acc = {metrics['acc']}, val loss = {metrics['loss']}"
+            )
+
+        chpt_handler = None
         trainer = create_supervised_trainer(
             model, optimizer=self._optim,
             loss_fn=self._loss, device=self._device
         )
-
-        pbar = ProgressBar()
-        history = defaultdict(list)
         pbar.attach(trainer, output_transform=lambda x: {'loss': x})
 
-        def log_metrics(engine: Engine, data_loader: torchdata.DataLoader, dtype: str,
-                        save_to: Optional[Dict[str, list]] = None,
-                        handlers: Optional[Dict[Events, Callable]] = {}):
-            metrics = self.evaluate(model, data_loader, handlers)
-            if save_to is not None:
-                save_to[f"{dtype}_acc"].append(metrics['acc'])
-                save_to[f"{dtype}_loss"].append(metrics['loss'])
-            pbar.log_message(
-                # f"Iter {engine.state.iteration}, "
-                f"epoch {engine.state.epoch}/{engine.state.max_epochs}, "
-                f"{dtype} acc = {metrics['acc']}, {dtype} loss = {metrics['loss']}"
-            )
-
-        # trainer.add_event_handler(
-        #     Events.ITERATION_COMPLETED(every=200),
-        #     log_metrics, data_loader=train_loader, dtype="train"
-        # )
-        trainer.add_event_handler(
-            Events.EPOCH_COMPLETED,
-            log_metrics, data_loader=train_loader,
-            dtype="train", save_to=history
-        )
-
-        if val_loader is not None:
-            handler = {}
-            if early_stopping:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            handlers = {}
+            if val_loader is not None and early_stopping:
                 def get_val_accuracy(engine):
                     return engine.state.metrics['acc']
                 es_handler = EarlyStopping(
@@ -77,31 +90,33 @@ class Trainer:
                     score_function=get_val_accuracy,
                     trainer=trainer
                 )
-                handler[Events.COMPLETED] = es_handler
+                chpt_handler = Checkpoint(
+                    {'model': model}, DiskSaver(str(tmpdir), create_dir=False),
+                    n_saved=1, filename_prefix='best', score_function=get_val_accuracy,
+                    score_name="val_acc", global_step_transform=global_step_from_engine(trainer)
+                )
+                handlers[Events.COMPLETED] = [es_handler, chpt_handler]
 
-            # trainer.add_event_handler(
-            #     Events.ITERATION_COMPLETED(every=200),
-            #     log_metrics, data_loader=val_loader, dtype="val"
-            # )
-            trainer.add_event_handler(
-                Events.EPOCH_COMPLETED,
-                log_metrics, data_loader=val_loader,
-                dtype="val", save_to=history, handlers=handler,
+            trainer.add_event_handler(Events.EPOCH_COMPLETED, _epoch_end_callback, handlers)
+
+            # pytorch-ignite v0.3.0's explicit seed parameter
+            trainer.run(
+                train_loader, max_epochs=epochs,
+                seed=np.random.randint(0, 1e6)
             )
 
-        # pytorch-ignite v0.3.0's explicit seed parameter
-        trainer.run(
-            train_loader, max_epochs=epochs,
-            seed=np.random.randint(0, 1e6)
-        )
-        return history
+            if reload_best and chpt_handler is not None:
+                model.load_state_dict(
+                    torch.load(
+                        Path(str(tmpdir)) / str(chpt_handler.last_checkpoint)
+                    ),
+                    strict=True
+                )
+            return history
 
-    def evaluate(self, model: nn.Module, data_loader: torchdata.DataLoader,
-                 handlers: Optional[Dict[Events, Callable]] = {}) -> dict:
+    def evaluate(self, model: nn.Module, data_loader: torchdata.DataLoader) -> dict:
         evaluator = create_supervised_evaluator(
             model, metrics={'acc': Accuracy(), 'loss': Loss(self._loss)},
             device=self._device
         )
-        for e, h in handlers.items():
-            evaluator.add_event_handler(e, h)
         return evaluator.run(data_loader).metrics
