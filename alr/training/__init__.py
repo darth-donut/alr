@@ -40,9 +40,18 @@ class Trainer:
         pbar = ProgressBar()
         history = defaultdict(list)
 
-        def _epoch_end_callback(engine: Engine, val_handlers={}):
+        train_evaluator = create_supervised_evaluator(
+            self._model, metrics={'acc': Accuracy(), 'loss': Loss(self._loss)},
+            device=self._device
+        )
+        val_evaluator = create_supervised_evaluator(
+            self._model, metrics={'acc': Accuracy(), 'loss': Loss(self._loss)},
+            device=self._device
+        )
+
+        def _log_metrics(engine: Engine):
             # train loader - save to history and print metrics
-            metrics = self.evaluate(train_loader)
+            metrics = train_evaluator.run(train_loader).metrics
             history[f"train_acc"].append(metrics['acc'])
             history[f"train_loss"].append(metrics['loss'])
             pbar.log_message(
@@ -55,15 +64,7 @@ class Trainer:
 
             # val loader - save to history and print metrics. Also, add handlers to
             # evaluator (e.g. early stopping, model checkpointing that depend on val_acc)
-            evaluator = create_supervised_evaluator(
-                self._model, metrics={'acc': Accuracy(), 'loss': Loss(self._loss)},
-                device=self._device
-            )
-            for e, hs in val_handlers.items():
-                for h in hs:
-                    evaluator.add_event_handler(e, h)
-
-            metrics = evaluator.run(val_loader).metrics
+            metrics = val_evaluator.run(val_loader).metrics
 
             history[f"val_acc"].append(metrics['acc'])
             history[f"val_loss"].append(metrics['loss'])
@@ -80,7 +81,6 @@ class Trainer:
         pbar.attach(trainer, output_transform=lambda x: {'loss': x})
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            handlers = {}
             if val_loader is not None and early_stopping:
                 def get_val_accuracy(engine):
                     return engine.state.metrics['acc']
@@ -94,9 +94,10 @@ class Trainer:
                     n_saved=1, filename_prefix='best', score_function=get_val_accuracy,
                     score_name="val_acc", global_step_transform=global_step_from_engine(trainer)
                 )
-                handlers[Events.COMPLETED] = [es_handler, chpt_handler]
+                val_evaluator.add_event_handler(Events.COMPLETED, es_handler)
+                val_evaluator.add_event_handler(Events.COMPLETED, chpt_handler)
 
-            trainer.add_event_handler(Events.EPOCH_COMPLETED, _epoch_end_callback, handlers)
+            trainer.add_event_handler(Events.EPOCH_COMPLETED, _log_metrics)
 
             # pytorch-ignite v0.3.0's explicit seed parameter
             trainer.run(
