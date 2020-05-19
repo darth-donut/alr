@@ -113,6 +113,7 @@ class BALD(AcquisitionFunction):
             H = -(mean_mc_preds * torch.log2(mean_mc_preds)).sum(dim=1)
             E = (mc_preds * torch.log2(mc_preds)).sum(dim=2).mean(dim=0)
             I = (H + E).cpu()
+            assert torch.isfinite(I).all()
             assert I.shape == (pool_size,)
             result = torch.argsort(I, descending=True).numpy()[:b]
             return idxs[result]
