@@ -4,6 +4,23 @@ Useful samplers when training with small datasets
 import torch.utils.data as torchdata
 import numpy as np
 from typing import Optional
+from itertools import chain
+
+
+class EpochExtender(torchdata.Sampler):
+    def __init__(self, dataset: torchdata.Dataset, by: int):
+        super().__init__(dataset)
+        assert by >= 1
+        self._by = by
+        self._dataset = dataset
+
+    def __len__(self):
+        return len(self._dataset) * self._by
+
+    def __iter__(self):
+        return chain.from_iterable(
+            np.random.permutation(len(self._dataset)) for _ in range(self._by)
+        )
 
 
 class RandomFixedLengthSampler(torchdata.Sampler):
