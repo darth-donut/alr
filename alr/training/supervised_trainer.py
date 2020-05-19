@@ -30,7 +30,7 @@ class Trainer:
         assert early_stopping is None or val_loader is not None
         assert not reload_best or val_loader is not None
 
-        pbar = ProgressBar()
+        pbar = ProgressBar(desc="Supervised training")
         history = defaultdict(list)
 
         train_evaluator = create_supervised_evaluator(
@@ -48,8 +48,8 @@ class Trainer:
             history[f"train_acc"].append(metrics['acc'])
             history[f"train_loss"].append(metrics['loss'])
             pbar.log_message(
-                f"epoch {engine.state.epoch}/{engine.state.max_epochs}, "
-                f"train acc = {metrics['acc']}, train loss = {metrics['loss']}"
+                f"epoch {engine.state.epoch}/{engine.state.max_epochs}\n"
+                f"\ttrain acc = {metrics['acc']}, train loss = {metrics['loss']}"
             )
 
             if val_loader is None:
@@ -62,8 +62,7 @@ class Trainer:
             history[f"val_acc"].append(metrics['acc'])
             history[f"val_loss"].append(metrics['loss'])
             pbar.log_message(
-                f"epoch {engine.state.epoch}/{engine.state.max_epochs}, "
-                f"val acc = {metrics['acc']}, val loss = {metrics['loss']}"
+                f"\tval acc = {metrics['acc']}, val loss = {metrics['loss']}"
             )
 
         trainer = create_supervised_trainer(
