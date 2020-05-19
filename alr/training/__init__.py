@@ -21,13 +21,13 @@ Checklist:
 
 
 class Trainer:
-    def __init__(self, loss, optimiser, device):
+    def __init__(self, model, loss, optimiser: str, device, *args, **kwargs):
         self._loss = loss
-        self._optim = optimiser
+        self._optim = getattr(torch.optim, optimiser)(model.parameters(), *args, **kwargs)
         self._device = device
+        self._model = model
 
     def fit(self,
-            model: nn.Module,
             train_loader: torchdata.DataLoader,
             val_loader: Optional[torchdata.DataLoader] = None,
             epochs: Optional[int] = 1,
@@ -42,7 +42,7 @@ class Trainer:
 
         def _epoch_end_callback(engine: Engine, val_handlers={}):
             # train loader - save to history and print metrics
-            metrics = self.evaluate(model, train_loader)
+            metrics = self.evaluate(train_loader)
             history[f"train_acc"].append(metrics['acc'])
             history[f"train_loss"].append(metrics['loss'])
             pbar.log_message(
@@ -56,7 +56,7 @@ class Trainer:
             # val loader - save to history and print metrics. Also, add handlers to
             # evaluator (e.g. early stopping, model checkpointing that depend on val_acc)
             evaluator = create_supervised_evaluator(
-                model, metrics={'acc': Accuracy(), 'loss': Loss(self._loss)},
+                self._model, metrics={'acc': Accuracy(), 'loss': Loss(self._loss)},
                 device=self._device
             )
             for e, hs in val_handlers.items():
@@ -74,7 +74,7 @@ class Trainer:
 
         chpt_handler = None
         trainer = create_supervised_trainer(
-            model, optimizer=self._optim,
+            self._model, optimizer=self._optim,
             loss_fn=self._loss, device=self._device
         )
         pbar.attach(trainer, output_transform=lambda x: {'loss': x})
@@ -90,7 +90,7 @@ class Trainer:
                     trainer=trainer
                 )
                 chpt_handler = Checkpoint(
-                    {'model': model}, DiskSaver(str(tmpdir), create_dir=False),
+                    {'model': self._model}, DiskSaver(str(tmpdir), create_dir=False),
                     n_saved=1, filename_prefix='best', score_function=get_val_accuracy,
                     score_name="val_acc", global_step_transform=global_step_from_engine(trainer)
                 )
@@ -105,7 +105,7 @@ class Trainer:
             )
 
             if reload_best and chpt_handler is not None:
-                model.load_state_dict(
+                self._model.load_state_dict(
                     torch.load(
                         Path(str(tmpdir)) / str(chpt_handler.last_checkpoint)
                     ),
@@ -113,9 +113,9 @@ class Trainer:
                 )
             return history
 
-    def evaluate(self, model: nn.Module, data_loader: torchdata.DataLoader) -> dict:
+    def evaluate(self, data_loader: torchdata.DataLoader) -> dict:
         evaluator = create_supervised_evaluator(
-            model, metrics={'acc': Accuracy(), 'loss': Loss(self._loss)},
+            self._model, metrics={'acc': Accuracy(), 'loss': Loss(self._loss)},
             device=self._device
         )
         return evaluator.run(data_loader).metrics
