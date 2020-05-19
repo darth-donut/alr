@@ -6,7 +6,7 @@ from ignite.engine import Engine, Events,\
     create_supervised_evaluator, create_supervised_trainer
 from ignite.metrics import Loss, Accuracy
 import torch.utils.data as torchdata
-from ignite.handlers import EarlyStopping, Checkpoint, global_step_from_engine, DiskSaver
+from ignite.handlers import EarlyStopping, ModelCheckpoint, global_step_from_engine
 from ignite.contrib.handlers import ProgressBar
 import numpy as np
 
@@ -90,13 +90,13 @@ class Trainer:
                     score_function=get_val_accuracy,
                     trainer=trainer
                 )
-                chpt_handler = Checkpoint(
-                    {'model': self._model}, DiskSaver(str(tmpdir), create_dir=False),
-                    n_saved=1, filename_prefix='best', score_function=get_val_accuracy,
-                    score_name="val_acc", global_step_transform=global_step_from_engine(trainer)
+                chpt_handler = ModelCheckpoint(
+                    str(tmpdir), filename_prefix='best', n_saved=1, create_dir=False,
+                    score_function=get_val_accuracy, score_name='val_acc',
+                    global_step_transform=global_step_from_engine(trainer)
                 )
                 val_evaluator.add_event_handler(Events.COMPLETED, es_handler)
-                val_evaluator.add_event_handler(Events.COMPLETED, chpt_handler)
+                val_evaluator.add_event_handler(Events.COMPLETED, chpt_handler, {'model': self._model})
 
             trainer.add_event_handler(Events.EPOCH_COMPLETED, _log_metrics)
 
@@ -108,9 +108,7 @@ class Trainer:
 
             if reload_best and chpt_handler is not None:
                 self._model.load_state_dict(
-                    torch.load(
-                        Path(str(tmpdir)) / str(chpt_handler.last_checkpoint)
-                    ),
+                    torch.load(str(chpt_handler.last_checkpoint)),
                     strict=True
                 )
             return history
