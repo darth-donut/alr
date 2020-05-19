@@ -16,10 +16,7 @@ from typing import Optional, Callable, Dict, Sequence
 
 r"""
 Checklist:
-1. basic trainer + evaluator function DONE
-2. early stopping + validation set DONE
-3. return best model after early stopping has kicked in (or not, just return best)
-4. Pseudo-labelling trainer
+1. Pseudo-labelling trainer
 """
 
 
@@ -37,6 +34,8 @@ class Trainer:
             early_stopping: Optional[int] = None,
             reload_best: Optional[bool] = False) -> Dict[str, list]:
         assert early_stopping is None or early_stopping > 0
+        assert early_stopping is None or val_loader is not None
+        assert not reload_best or val_loader is not None
 
         pbar = ProgressBar()
         history = defaultdict(list)

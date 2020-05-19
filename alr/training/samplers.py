@@ -35,10 +35,7 @@ class RandomFixedLengthSampler(torchdata.Sampler):
     def __iter__(self):
         if self._length > len(self._dataset):
             return iter(
-                np.random.choice(
-                    len(self._dataset),
-                    size=self._length, replace=True
-                )
+                np.random.permutation(self._length) % len(self._dataset)
             )
         else:
             if self._shuffle:
