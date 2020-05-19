@@ -30,7 +30,7 @@ class Trainer:
         assert early_stopping is None or val_loader is not None
         assert not reload_best or val_loader is not None
 
-        pbar = ProgressBar(desc="Supervised training")
+        pbar = ProgressBar()
         history = defaultdict(list)
 
         train_evaluator = create_supervised_evaluator(
