@@ -81,6 +81,7 @@ class Trainer:
         pbar.attach(trainer, output_transform=lambda x: {'loss': x})
 
         with tempfile.TemporaryDirectory() as tmpdir:
+            assert not list(Path(str(tmpdir)).rglob("*.pth"))
             if val_loader is not None and early_stopping:
                 def get_val_accuracy(engine):
                     return engine.state.metrics['acc']
