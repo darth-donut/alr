@@ -51,8 +51,6 @@ class Annealer:
         self._step_interval = step_interval
 
     def step(self, _):
-        # todo(harry): remove me
-        print("stepped annealer")
         self._step += 1
 
     @property
@@ -60,8 +58,6 @@ class Annealer:
         if self._step < self._T1:
             return 0
         elif self._step > self._T2:
-            # todo(harry): remove me
-            print("Passed threshold")
             return self._alpha
         else:
             return ((self._step - self._T1) / (self._T2 - self._T1)) * self._alpha
@@ -74,7 +70,6 @@ class Annealer:
 
 
 class PLTracker:
-    # todo(harry): test this class
     def __init__(self, active: bool, device: _DeviceType = None):
         self._device = device
         self._last_y = None
@@ -124,6 +119,16 @@ class PLTracker:
 
 
 def soft_nll_loss(preds: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    r"""
+    Calculates the soft negative log-likelihood loss
+
+    Args:
+        preds (torch.Tensor): predictions. This is expected to be log-softmax scores.
+        target (torch.Tensor): target. This is expected to be log-softmax scores.
+
+    Returns:
+        torch.Tensor: a singleton tensor with the loss value
+    """
     # -1/N * sum_y p(y)log[p(y)]
     res = -(target.exp() * preds).sum(dim=1).mean()
     assert torch.isfinite(res)
@@ -131,6 +136,16 @@ def soft_nll_loss(preds: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
 
 
 def soft_cross_entropy(logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    r"""
+    Calculates the soft cross entropy loss. This combines log-softmax with `soft_nll_loss`.
+
+    Args:
+        logits (torch.Tensor): predictions. This is expected to be logits.
+        target (torch.Tensor): target. This is expected to be logits.
+
+    Returns:
+        torch.Tensor: a singleton tensor with the loss value
+    """
     # -1/N * sum_y p(y)log[p(y)]
     res = -(F.softmax(target, dim=-1) * F.log_softmax(logits, dim=-1)).sum(dim=1).mean()
     assert torch.isfinite(res)
@@ -188,7 +203,7 @@ class VanillaPLTrainer:
                  reload_best: Optional[bool] = False,
                  track_pl_metrics: Optional[bool] = False,
                  T1: Optional[int] = 0,
-                 T2: Optional[int] = 200,
+                 T2: Optional[int] = 40,
                  step_interval: Optional[int] = 50,
                  device: _DeviceType = None,
                  *args, **kwargs):
@@ -212,8 +227,12 @@ class VanillaPLTrainer:
             track_pl_metrics (bool, optional): if `True`, then the quality of pseudo-labels and uncertainty will be
                 tracked throughout the training epochs. :meth:`fit` will also return additional keys representing
                 these aforementioned metrics.
-            T1 (int, optional): when the weight coefficient starts kicking in.
-            T2 (int, optional): when the weight coefficient starts plateauing.
+            T1 (int, optional): when the weight coefficient starts kicking in. 0 implies it immediately starts
+                taking effect since; this is probably what you want -- the model is already warm-started.
+            T2 (int, optional): when the weight coefficient starts plateauing. For example,
+                if `step_interval` is 50 and the number of iterations per epoch is 200,
+                then there will be a total of 4 steps per epoch. If T2 is 40, then on the 10th epoch onwards,
+                the coefficient is maxed out and plateaus at 3.
             step_interval (int, optional): how often should the annealer increment a step (counted in number of
                 iterations, *not* epochs); this value is related to `T1` and `T2`.
             device (str, None, torch.device): device type.
