@@ -158,8 +158,6 @@ class PLTrainer:
             device=self._device
         )
 
-        pbar.attach(train_evaluator, output_transform=lambda x: {'loss': x})
-
         def _log_metrics(engine: Engine):
             # train loader - save to history and print metrics
             metrics = train_evaluator.run(train_loader).metrics
@@ -200,6 +198,7 @@ class PLTrainer:
         #  2. annealer update
         ssl_trainer.add_event_handler(Events.EPOCH_COMPLETED, _log_metrics)
         ssl_trainer.add_event_handler(Events.ITERATION_COMPLETED(every=50), lambda _: annealer.step())
+        pbar.attach(ssl_trainer, output_transform=lambda x: {'loss': x})
 
         ssl_trainer.run(
             pool_loader, max_epochs=epoch2,
