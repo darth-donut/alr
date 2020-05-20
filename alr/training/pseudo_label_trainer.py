@@ -13,10 +13,66 @@ import numpy as np
 from collections import defaultdict
 from typing import Optional, Dict, Sequence, Union
 
-
+from alr.data import UnlabelledDataset
 from alr.training import Trainer
-from alr.utils import _DeviceType
+from alr.utils import _DeviceType, _map_device
 from alr.training.utils import EarlyStopper
+
+r"""
+todo(harry):
+    2. tracking quality/uncertainty
+    3. thresholding capabilities
+"""
+
+
+class PLTracker:
+    def __init__(self, active, device: _DeviceType = None):
+        self._device = device
+        self._last_y = None
+        self._correct = self._total = 0
+        self._confidence = []
+        self._track = active
+
+    def process_batch(self, batch):
+        if self._track:
+            x, y = _map_device(batch, self._device)
+            assert self._last_y is None
+            self._last_y = y
+            assert x.size(0) == y.size(0)
+            self._total += y.size(0)
+            return x
+        # batch = x
+        return batch.to(self._device)
+
+    def record_predictions(self, probs: torch.Tensor):
+        # todo(harry): test this function
+        if self._track:
+            # record accuracy
+            assert probs.ndim == 2  # [N x C]
+            conf, preds = torch.max(probs, dim=1)
+            assert self._last_y is not None
+            self._correct += torch.eq(preds, self._last_y).sum().item()
+            self._last_y = None
+
+            # record confidence
+            self._confidence.extend(conf.tolist())
+
+    def attach(self, engine: Engine):
+        if self._track:
+            engine.add_event_handler(Events.EPOCH_STARTED, self.reset)
+            engine.add_event_handler(Events.EPOCH_COMPLETED, self.write_accuracy)
+            engine.add_event_handler(Events.EPOCH_COMPLETED, self.write_confidence)
+
+    def write_accuracy(self, engine):
+        engine.state.pl_tracker['acc'] = self._correct / self._total
+
+    def write_confidence(self, engine):
+        engine.state.pl_tracker['conf'] = self._confidence
+
+    def reset(self, engine):
+        self._correct = self._total = 0
+        self._confidence = []
+        engine.state.pl_tracker = {}
 
 
 def soft_nll_loss(preds: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
@@ -32,21 +88,18 @@ def soft_cross_entropy(logits: torch.Tensor, target: torch.Tensor) -> torch.Tens
     assert torch.isfinite(res)
     return res
 
-r"""
-todo(harry):
-    2. tracking quality/uncertainty
-    3. thresholding capabilities
-"""
+
 def create_semisupervised_trainer(model: nn.Module, optimizer,
                                   uloss_fn, lloss_fn, annealer,
                                   train_iterable, soft,
-                                  device):
+                                  device, tracker: PLTracker):
     def _step(_, batch):
-        x = batch.to(device)
+        x = tracker.process_batch(batch)
         # get pseudo-labels for this batch using eval mode
         with torch.no_grad():
             model.eval()
             preds = model(x)
+            tracker.record_predictions(preds)
             if not soft:
                 preds = torch.argmax(preds, dim=1)
 
@@ -56,8 +109,7 @@ def create_semisupervised_trainer(model: nn.Module, optimizer,
 
         # normal forward pass on training data
         model.train()
-        x, y = next(train_iterable)
-        x, y = x.to(device), y.to(device)
+        x, y = _map_device(next(train_iterable), device)
         l_loss = lloss_fn(model(x), y)
 
         # total loss
@@ -68,6 +120,7 @@ def create_semisupervised_trainer(model: nn.Module, optimizer,
         loss.backward()
         optimizer.step()
         return loss.item()
+
     return Engine(_step)
 
 
@@ -97,6 +150,8 @@ class Annealer:
         self._alpha = alpha
 
     def step(self):
+        # todo(harry): remove me
+        print("stepped annealer")
         self._step += 1
 
     @property
@@ -104,6 +159,8 @@ class Annealer:
         if self._step < self._T1:
             return 0
         elif self._step > self._T2:
+            # todo(harry): remove me
+            print("Passed threshold")
             return self._alpha
         else:
             return ((self._step - self._T1) / (self._T2 - self._T1)) * self._alpha
@@ -128,7 +185,16 @@ class PLTrainer:
             epochs: Union[int, Sequence[int]] = 1,
             soft: Optional[bool] = False,
             patience: Optional[int] = None,
-            reload_best: Optional[bool] = False) -> Dict[str, list]:
+            reload_best: Optional[bool] = False,
+            track_pl_metrics: Optional[bool] = False) -> Dict[str, list]:
+        if track_pl_metrics and \
+                (not isinstance(pool_loader.dataset, UnlabelledDataset)
+                 or not pool_loader.dataset.debug):
+            raise ValueError(
+                f"If track_pl_metrics is True, then the dataset in pool_loader "
+                f"must be of the type UnlabelledDataset with debug on."
+            )
+
         if isinstance(epochs, int):
             epochs = (epochs, epochs)
         assert len(epochs) == 2
@@ -159,6 +225,8 @@ class PLTrainer:
         )
 
         def _log_metrics(engine: Engine):
+            # engine = ssl engine with `pl_tracker`
+
             # train loader - save to history and print metrics
             metrics = train_evaluator.run(train_loader).metrics
             history[f"train_acc"].append(metrics['acc'])
@@ -167,6 +235,11 @@ class PLTrainer:
                 f"epoch {engine.state.epoch}/{engine.state.max_epochs}\n"
                 f"\ttrain acc = {metrics['acc']}, train loss = {metrics['loss']}"
             )
+
+            # log PL tracking metrics
+            if track_pl_metrics:
+                history["pl_acc"].append(engine.state.pl_tracker['acc'])
+                history["confidence"].append(engine.state.pl_tracker['conf'])
 
             if val_loader is None:
                 return  # job done
@@ -181,14 +254,15 @@ class PLTrainer:
                 f"\tval acc = {metrics['acc']}, val loss = {metrics['loss']}"
             )
 
+        annealer = Annealer(step=1, T1=0, T2=700)
+        pl_tracker = PLTracker(active=track_pl_metrics, device=self._device)
         # use an old optimiser with whatever state it already had
         # since we're simulating a continuation
-        annealer = Annealer(step=1, T1=0, T2=700)
         ssl_trainer = create_semisupervised_trainer(
             self._model, supervised_trainer._optim, uloss_fn=self._uloss,
             lloss_fn=self._lloss, annealer=annealer,
             train_iterable=WraparoundLoader(train_loader), soft=soft,
-            device=self._device
+            device=self._device, tracker=pl_tracker,
         )
         if val_loader is not None and patience:
             es = EarlyStopper(self._model, patience=patience, trainer=ssl_trainer, key='acc', mode='max')
@@ -196,6 +270,8 @@ class PLTrainer:
         # events to add:
         #  1. log_metrics
         #  2. annealer update
+        #  3. tracker
+        pl_tracker.attach(ssl_trainer)  # attach before log_metrics, otherwise it's not visible
         ssl_trainer.add_event_handler(Events.EPOCH_COMPLETED, _log_metrics)
         ssl_trainer.add_event_handler(Events.ITERATION_COMPLETED(every=50), lambda _: annealer.step())
         pbar.attach(ssl_trainer, output_transform=lambda x: {'loss': x})
@@ -209,6 +285,11 @@ class PLTrainer:
 
         for k, v in supervised_history.items():
             v.extend(history[k])
+
+        if track_pl_metrics:
+            supervised_history["pl_acc"] = history["pl_acc"]
+            supervised_history["confidence"] = history["confidence"]
+
         # return combined history
         return supervised_history
 
