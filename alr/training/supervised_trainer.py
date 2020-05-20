@@ -24,10 +24,10 @@ class Trainer:
             train_loader: torchdata.DataLoader,
             val_loader: Optional[torchdata.DataLoader] = None,
             epochs: Optional[int] = 1,
-            early_stopping: Optional[int] = None,
+            patience: Optional[int] = None,
             reload_best: Optional[bool] = False) -> Dict[str, list]:
-        assert early_stopping is None or early_stopping > 0
-        assert early_stopping is None or val_loader is not None
+        assert patience is None or patience > 0
+        assert patience is None or val_loader is not None
         assert not reload_best or val_loader is not None
 
         pbar = ProgressBar()
@@ -70,8 +70,8 @@ class Trainer:
             loss_fn=self._loss, device=self._device
         )
         pbar.attach(trainer, output_transform=lambda x: {'loss': x})
-        if val_loader is not None and early_stopping:
-            es = EarlyStopper(self._model, early_stopping, trainer, key='acc', mode='max')
+        if val_loader is not None and patience:
+            es = EarlyStopper(self._model, patience, trainer, key='acc', mode='max')
             es.attach(val_evaluator)
         trainer.add_event_handler(Events.EPOCH_COMPLETED, _log_metrics)
         # pytorch-ignite v0.3.0's explicit seed parameter
@@ -79,7 +79,7 @@ class Trainer:
             train_loader, max_epochs=epochs,
             seed=np.random.randint(0, 1e6)
         )
-        if val_loader is not None and early_stopping and reload_best:
+        if val_loader is not None and patience and reload_best:
             es.reload_best()
         return history
 
