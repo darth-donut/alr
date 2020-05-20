@@ -1,23 +1,21 @@
-import torch
-from ignite.engine import Engine, Events
-from torch import nn
-import torch.nn.functional as F
-from typing import Optional
-from ignite.engine import Engine, Events, \
-    create_supervised_evaluator
-from ignite.metrics import Loss, Accuracy
-import torch.utils.data as torchdata
-from ignite.contrib.handlers import ProgressBar
-import numpy as np
-
 from collections import defaultdict
 from typing import Optional, Dict, Sequence, Union
 
+import numpy as np
+import torch
+import torch.nn.functional as F
+import torch.utils.data as torchdata
+from ignite.contrib.handlers import ProgressBar
+from ignite.engine import Engine, Events, \
+    create_supervised_evaluator
+from ignite.metrics import Loss, Accuracy
+from torch import nn
+
 from alr.data import UnlabelledDataset
 from alr.training import Trainer
-from alr.utils._type_aliases import _DeviceType, _Loss_fn
-from alr.utils import _map_device
 from alr.training.utils import EarlyStopper
+from alr.utils import _map_device
+from alr.utils._type_aliases import _DeviceType, _Loss_fn
 
 r"""
 todo(harry):
