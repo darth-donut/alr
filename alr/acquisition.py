@@ -7,7 +7,7 @@ import torch
 import torch.distributions as dist
 import torch.utils.data as torchdata
 
-from alr.utils import _DeviceType
+from alr.utils._type_aliases import _DeviceType
 
 _BayesianCallable = Callable[[torch.Tensor], torch.Tensor]
 

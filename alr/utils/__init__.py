@@ -6,7 +6,8 @@ import random
 from typing import Optional, Sequence
 
 from alr.utils.time_utils import Elapsed, timeop, time_this, Time
-from alr.utils.experiment_helpers import stratified_partition, eval_fwd, eval_fwd_exp, _DeviceType
+from alr.utils.experiment_helpers import stratified_partition, eval_fwd, eval_fwd_exp
+from alr.utils._type_aliases import _DeviceType
 from alr.utils.progress_bar import progress_bar, range_progress_bar
 
 
