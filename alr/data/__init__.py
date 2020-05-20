@@ -9,7 +9,8 @@ from alr.acquisition import AcquisitionFunction
 class UnlabelledDataset(torchdata.Dataset):
     def __init__(self,
                  dataset: torchdata.Dataset,
-                 label_fn: Optional[Callable[[torchdata.Dataset], torchdata.Dataset]] = None):
+                 label_fn: Optional[Callable[[torchdata.Dataset], torchdata.Dataset]] = None,
+                 debug: Optional[bool] = False):
         r"""
         A wrapper class to manage the unlabelled `dataset` by providing a simple
         interface to :meth:`label` specific points and remove from the underlying dataset.
@@ -25,12 +26,18 @@ class UnlabelledDataset(torchdata.Dataset):
                 takes an unlabelled dataset and returns another
                 dataset that's fully labelled. If this is not provided, then `dataset` should
                 be labelled.
+            debug (bool, optional): Turn debug mode on. If `True`, then indexing this dataset
+                will return both `(x, y)` instead of just `x`; this is useful for research purposes.
+                Note, `label_fn` must be `None` otherwise an error will be raised.
         """
         self._dataset = dataset
         self._label_fn = label_fn
         self._mask = torch.ones(len(dataset), dtype=torch.bool)
         self._len = len(dataset)
         self._idx_mask = torch.arange(len(dataset))
+        self.debug = debug
+        if self.debug:
+            assert self._label_fn is None
 
     def label(self, idxs: Sequence[int]) -> torchdata.Dataset:
         r"""
@@ -65,8 +72,8 @@ class UnlabelledDataset(torchdata.Dataset):
 
     def __getitem__(self, idx) -> torch.Tensor:
         # indices of data where it hasn't been labelled yet
-        if self._label_fn:
-            # user provided x only
+        if self._label_fn or self.debug:
+            # user provided x only or debug mode is on, return (x, y)
             return self._dataset[self._idx_mask[idx].item()]
         # user provided (x, y) => return x only
         return self._dataset[self._idx_mask[idx].item()][0]
