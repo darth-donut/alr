@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Optional, Dict, Sequence, Union
+from typing import Optional, Dict, Sequence, Union, Callable
 
 import numpy as np
 import torch
@@ -15,6 +15,7 @@ from alr.data import UnlabelledDataset
 from alr.training import Trainer
 from alr.training.utils import EarlyStopper
 from alr.utils import _map_device
+from alr.utils.math import cross_entropy
 from alr.utils._type_aliases import _DeviceType, _Loss_fn
 
 r"""
@@ -70,12 +71,16 @@ class Annealer:
 
 
 class PLTracker:
-    def __init__(self, active: bool, device: _DeviceType = None):
+    def __init__(self,
+                 entropy_fn: Optional[Callable[[torch.Tensor], torch.Tensor]],
+                 device: _DeviceType = None):
         self._device = device
         self._last_y = None
         self._correct = self._total = 0
         self._confidence = []
-        self._track = active
+        self._entropy = []
+        self._track = entropy_fn is not None
+        self._entropy_fn = entropy_fn
 
     def process_batch(self, batch):
         if self._track:
@@ -99,22 +104,22 @@ class PLTracker:
 
             # record confidence
             self._confidence.extend(conf.tolist())
+            self._entropy.extend(self._entropy_fn(probs).sum(dim=-1).tolist())
 
     def attach(self, engine: Engine):
         if self._track:
-            engine.add_event_handler(Events.EPOCH_STARTED, self.reset)
-            engine.add_event_handler(Events.EPOCH_COMPLETED, self.write_accuracy)
-            engine.add_event_handler(Events.EPOCH_COMPLETED, self.write_confidence)
+            engine.add_event_handler(Events.EPOCH_STARTED, self._reset)
+            engine.add_event_handler(Events.EPOCH_COMPLETED, self._flush)
 
-    def write_accuracy(self, engine):
+    def _flush(self, engine):
         engine.state.pl_tracker['acc'] = self._correct / self._total
-
-    def write_confidence(self, engine):
         engine.state.pl_tracker['confidence'] = self._confidence
+        engine.state.pl_tracker['entropy'] = self._entropy
 
-    def reset(self, engine):
+    def _reset(self, engine):
         self._correct = self._total = 0
         self._confidence = []
+        self._entropy = []
         engine.state.pl_tracker = {}
 
 
@@ -130,7 +135,7 @@ def soft_nll_loss(preds: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         torch.Tensor: a singleton tensor with the loss value
     """
     # -1/N * sum_y p(y)log[p(y)]
-    res = -(target.exp() * preds).sum(dim=1).mean()
+    res = cross_entropy(target, preds, mode='logsoftmax').sum(dim=1).mean()
     assert torch.isfinite(res)
     return res
 
@@ -147,7 +152,7 @@ def soft_cross_entropy(logits: torch.Tensor, target: torch.Tensor) -> torch.Tens
         torch.Tensor: a singleton tensor with the loss value
     """
     # -1/N * sum_y p(y)log[p(y)]
-    res = -(F.softmax(target, dim=-1) * F.log_softmax(logits, dim=-1)).sum(dim=1).mean()
+    res = cross_entropy(target, logits, mode='logits').sum(dim=1).mean()
     assert torch.isfinite(res)
     return res
 
@@ -156,9 +161,9 @@ def create_semisupervised_trainer(model: nn.Module, optimiser,
                                   lloss_fn: _Loss_fn, uloss_fn: _Loss_fn,
                                   annealer: Annealer,
                                   train_iterable: WraparoundLoader,
-                                  track: bool,
+                                  entropy_fn: Optional[Callable[[torch.Tensor], torch.Tensor]],
                                   use_soft_labels: bool, device: _DeviceType):
-    tracker = PLTracker(active=track, device=device)
+    tracker = PLTracker(entropy_fn=entropy_fn, device=device)
 
     def _step(_, batch):
         x = tracker.process_batch(batch)
@@ -201,7 +206,7 @@ class VanillaPLTrainer:
                  use_soft_labels: Optional[bool] = False,
                  patience: Optional[int] = None,
                  reload_best: Optional[bool] = False,
-                 track_pl_metrics: Optional[bool] = False,
+                 track_pl_metrics: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
                  T1: Optional[int] = 0,
                  T2: Optional[int] = 40,
                  step_interval: Optional[int] = 50,
@@ -224,9 +229,11 @@ class VanillaPLTrainer:
             patience (int, optional): if not `None`, then validation accuracy will be used to determine when to stop.
             reload_best (bool, optional): patience must be non-`None` if this is set to `True`: reloads the best model
                 according to validation accuracy at the end of training.
-            track_pl_metrics (bool, optional): if `True`, then the quality of pseudo-labels and uncertainty will be
-                tracked throughout the training epochs. :meth:`fit` will also return additional keys representing
-                these aforementioned metrics.
+            track_pl_metrics (Callable, optional): tracks the quality , uncertainty, and entropy of pseudo-labels
+                throughout the training epochs. :meth:`fit` will also return additional keys representing
+                these aforementioned metrics. This callable is expected to take in a tensor (output of model)
+                and return the (unreduced) entropy. E.g. :func:`~alr.utils.math.entropy`. If None, no tracking will
+                be done.
             T1 (int, optional): when the weight coefficient starts kicking in. 0 implies it immediately starts
                 taking effect since; this is probably what you want -- the model is already warm-started.
             T2 (int, optional): when the weight coefficient starts plateauing. For example,
@@ -268,11 +275,11 @@ class VanillaPLTrainer:
             pool_loader: torchdata.DataLoader,
             val_loader: Optional[torchdata.DataLoader] = None,
             epochs: Union[int, Sequence[int]] = 1) -> Dict[str, list]:
-        if self._track_pl_metrics and \
+        if self._track_pl_metrics is not None and \
                 (not isinstance(pool_loader.dataset, UnlabelledDataset)
                  or not pool_loader.dataset.debug):
             raise ValueError(
-                f"If track_pl_metrics is True, then the dataset in pool_loader "
+                f"If track_pl_metrics is provided, then the dataset in pool_loader "
                 f"must be of the type UnlabelledDataset with debug on."
             )
 
@@ -324,7 +331,7 @@ class VanillaPLTrainer:
             )
 
             # log PL tracking metrics
-            if self._track_pl_metrics:
+            if self._track_pl_metrics is not None:
                 history["pl_acc"].append(engine.state.pl_tracker['acc'])
                 history["confidence"].append(engine.state.pl_tracker['confidence'])
 
@@ -348,7 +355,7 @@ class VanillaPLTrainer:
             ), lloss_fn=self._lloss, uloss_fn=self._uloss,
             annealer=Annealer(step=1, T1=self._T1, T2=self._T2, step_interval=self._step_interval),
             train_iterable=WraparoundLoader(train_loader),
-            track=self._track_pl_metrics, use_soft_labels=self._use_soft_labels,
+            entropy_fn=self._track_pl_metrics, use_soft_labels=self._use_soft_labels,
             device=self._device
         )
         if val_loader is not None and self._patience:
@@ -367,7 +374,7 @@ class VanillaPLTrainer:
         for k, v in supervised_history.items():
             v.extend(history[k])
 
-        if self._track_pl_metrics:
+        if self._track_pl_metrics is not None:
             supervised_history["pl_acc"] = history["pl_acc"]
             supervised_history["confidence"] = history["confidence"]
 
