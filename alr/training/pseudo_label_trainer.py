@@ -112,8 +112,8 @@ class PLTracker:
 
     def _flush(self, engine):
         engine.state.pl_tracker['pl_acc'] = self._correct / self._total
-        engine.state.pl_tracker['confidence'] = self._confidence
-        engine.state.pl_tracker['entropy'] = self._entropy
+        engine.state.pl_tracker['confidence'] = np.array(self._confidence)
+        engine.state.pl_tracker['entropy'] = np.array(self._entropy)
 
     def _reset(self, engine):
         self._correct = self._total = 0
@@ -273,7 +273,7 @@ class VanillaPLTrainer:
             train_loader: torchdata.DataLoader,
             pool_loader: torchdata.DataLoader,
             val_loader: Optional[torchdata.DataLoader] = None,
-            epochs: Union[int, Sequence[int]] = 1) -> Dict[str, list]:
+            epochs: Union[int, Sequence[int]] = 1) -> Dict[str, Dict[str, list]]:
         if self._track_pl_metrics is not None and \
                 (not isinstance(pool_loader.dataset, UnlabelledDataset)
                  or not pool_loader.dataset.debug):
@@ -301,18 +301,18 @@ class VanillaPLTrainer:
             train_loader, val_loader, epochs=epoch1,
         )
 
+        history = {}
+
         if self._track_pl_metrics is not None:
+            history['pre'] = {}
             for k, v in _get_pl_metrics(
                     self._model,
                     PLTracker(entropy_fn=self._track_pl_metrics, device=self._device),
                     pool_loader).items():
-                assert k not in supervised_history
-                supervised_history[k] = v
-
+                history['pre'][k] = v
         # stage 2
+        pl_history = defaultdict(list)
         pbar = ProgressBar()
-        history = defaultdict(list)
-
         train_evaluator = create_supervised_evaluator(
             self._model, metrics={'acc': Accuracy(), 'loss': Loss(self._lloss)},
             device=self._device
@@ -324,35 +324,25 @@ class VanillaPLTrainer:
 
         def _log_metrics(engine: Engine):
             # engine = ssl engine with `pl_tracker`
-
-            # train loader - save to history and print metrics
             metrics = train_evaluator.run(train_loader).metrics
-            history[f"train_acc"].append(metrics['acc'])
-            history[f"train_loss"].append(metrics['loss'])
+            pl_history["train_acc"].append(metrics['acc'])
+            pl_history["train_loss"].append(metrics['loss'])
             pbar.log_message(
                 f"epoch {engine.state.epoch}/{engine.state.max_epochs}\n"
                 f"\ttrain acc = {metrics['acc']}, train loss = {metrics['loss']}"
             )
-
-            # log PL tracking metrics
             if self._track_pl_metrics is not None:
-                history["pl_acc"].append(engine.state.pl_tracker['pl_acc'])
-                history["confidence"].append(engine.state.pl_tracker['confidence'])
-                history["entropy"].append(engine.state.pl_tracker['entropy'])
-
+                pl_history["pl_acc"].append(engine.state.pl_tracker['pl_acc'])
+                pl_history["confidence"].append(engine.state.pl_tracker['confidence'])
+                pl_history["entropy"].append(engine.state.pl_tracker['entropy'])
             if val_loader is None:
                 return  # job done
-
-            # val loader - save to history and print metrics. Also, add handlers to
-            # evaluator (e.g. early stopping, model checkpointing that depend on val_acc)
             metrics = val_evaluator.run(val_loader).metrics
-
-            history[f"val_acc"].append(metrics['acc'])
-            history[f"val_loss"].append(metrics['loss'])
+            pl_history["val_acc"].append(metrics['acc'])
+            pl_history["val_loss"].append(metrics['loss'])
             pbar.log_message(
                 f"\tval acc = {metrics['acc']}, val loss = {metrics['loss']}"
             )
-
         ssl_trainer = create_semisupervised_trainer(
             model=self._model,
             optimiser=getattr(torch.optim, self._optim)(
@@ -377,11 +367,9 @@ class VanillaPLTrainer:
         if val_loader is not None and self._patience and self._reload_best:
             es.reload_best()
 
-        for k, v in supervised_history.items():
-            v.extend(history[k])
-
-        # return combined history
-        return supervised_history
+        history['stage1'] = {k: np.array(v) for k, v in supervised_history.items()}
+        history['stage2'] = {k: np.array(v) for k, v in pl_history.items()}
+        return history
 
     def evaluate(self, data_loader: torchdata.DataLoader) -> dict:
         evaluator = create_supervised_evaluator(
@@ -400,9 +388,9 @@ def _get_pl_metrics(model: nn.Module,
             x = tracker.process_batch(batch)
             tracker.record_predictions(model(x))
     metrics = {
-        'pl_acc': [tracker._correct / tracker._total],
-        'confidence': [tracker._confidence],
-        'entropy': [tracker._entropy],
+        'pl_acc': np.array([tracker._correct / tracker._total]),
+        'confidence': np.array([tracker._confidence]),
+        'entropy': np.array([tracker._entropy]),
     }
     # reset tracker
     tracker._correct = tracker._total = 0

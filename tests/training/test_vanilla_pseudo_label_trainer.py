@@ -50,7 +50,7 @@ def test_pl_tracker_metrics():
 
     @engine.on(Events.EPOCH_COMPLETED)
     def record(e):
-        accs.append(e.state.pl_tracker['acc'])
+        accs.append(e.state.pl_tracker['pl_acc'])
         confs.append(e.state.pl_tracker['confidence'])
         entropies.append(e.state.pl_tracker['entropy'])
 
