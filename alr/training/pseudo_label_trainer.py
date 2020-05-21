@@ -20,7 +20,6 @@ from alr.utils._type_aliases import _DeviceType, _Loss_fn
 
 r"""
 todo(harry):
-    0. Acc PLTracker for val/test dataset
     1. thresholding capabilities
 """
 
@@ -306,7 +305,7 @@ class VanillaPLTrainer:
             for k, v in _get_pl_metrics(
                     self._model,
                     PLTracker(entropy_fn=self._track_pl_metrics, device=self._device),
-                    train_loader).items():
+                    pool_loader).items():
                 assert k not in supervised_history
                 supervised_history[k] = v
 
