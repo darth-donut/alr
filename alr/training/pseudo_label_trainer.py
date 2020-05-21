@@ -72,7 +72,7 @@ class Annealer:
 
 class PLTracker:
     def __init__(self,
-                 entropy_fn: Optional[Callable[[torch.Tensor], torch.Tensor]],
+                 entropy_fn: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
                  device: _DeviceType = None):
         self._device = device
         self._last_y = None
@@ -161,9 +161,8 @@ def create_semisupervised_trainer(model: nn.Module, optimiser,
                                   lloss_fn: _Loss_fn, uloss_fn: _Loss_fn,
                                   annealer: Annealer,
                                   train_iterable: WraparoundLoader,
-                                  entropy_fn: Optional[Callable[[torch.Tensor], torch.Tensor]],
-                                  use_soft_labels: bool, device: _DeviceType):
-    tracker = PLTracker(entropy_fn=entropy_fn, device=device)
+                                  tracker: PLTracker,
+                                  use_soft_labels: bool = False, device: _DeviceType = None):
 
     def _step(_, batch):
         x = tracker.process_batch(batch)
@@ -355,7 +354,8 @@ class VanillaPLTrainer:
             ), lloss_fn=self._lloss, uloss_fn=self._uloss,
             annealer=Annealer(step=1, T1=self._T1, T2=self._T2, step_interval=self._step_interval),
             train_iterable=WraparoundLoader(train_loader),
-            entropy_fn=self._track_pl_metrics, use_soft_labels=self._use_soft_labels,
+            tracker=PLTracker(entropy_fn=self._track_pl_metrics, device=self._device),
+            use_soft_labels=self._use_soft_labels,
             device=self._device
         )
         if val_loader is not None and self._patience:
