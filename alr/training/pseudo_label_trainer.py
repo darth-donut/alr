@@ -2,6 +2,7 @@ from collections import defaultdict
 from typing import Optional, Dict, Sequence, Union, Callable
 
 import numpy as np
+import pickle
 import torch
 import torch.nn.functional as F
 import torch.utils.data as torchdata
@@ -10,6 +11,7 @@ from ignite.engine import Engine, Events, \
     create_supervised_evaluator
 from ignite.metrics import Loss, Accuracy
 from torch import nn
+from pathlib import Path
 
 from alr.data import UnlabelledDataset
 from alr.training import Trainer
@@ -22,6 +24,47 @@ r"""
 todo(harry):
     1. thresholding capabilities
 """
+
+
+class PLPredictionSaver:
+    def __init__(self,
+                 root: Optional[str] = "pl_metrics"):
+        self._output_transform = lambda x: x
+        self._preds = []
+        self._targets = []
+        self._root = Path(root)
+        if self._root.is_dir():
+            raise RuntimeError(f"{str(self._root)} already exists.")
+
+    def attach(self,
+               engine: Engine,
+               output_transform: Callable[..., tuple] = lambda x: x):
+        self._output_transform = output_transform
+        engine.add_event_handler(Events.EPOCH_STARTED, self._reset)
+        engine.add_event_handler(Events.EPOCH_COMPLETED, self._flush)
+        engine.add_event_handler(Events.ITERATION_COMPLETED, self._parse)
+
+    def _parse(self, engine: Engine):
+        pred, target = self._output_transform(engine.state.output)
+        self._preds.append(pred.cpu().numpy())
+        self._targets.append(target.cpu().numpy())
+
+    def _flush(self, engine: Engine):
+        payload = {
+            'preds': np.concatenate(self._preds, axis=0),
+            'targets': np.concatenate(self._targets, axis=0),
+        }
+        epoch = engine.state.epoch
+        dest = self._root
+        dest.mkdir(parents=True, exist_ok=True)
+        fname = dest / f"{str(epoch)}_pl_predictions.pkl"
+        assert not fname.exists(), "You've done goofed"
+        with open(fname, "wb") as fp:
+            pickle.dump(payload, fp)
+
+    def _reset(self, _):
+        self._preds = []
+        self._targets = []
 
 
 class WraparoundLoader:
@@ -69,59 +112,6 @@ class Annealer:
         )
 
 
-class PLTracker:
-    def __init__(self,
-                 entropy_fn: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
-                 device: _DeviceType = None):
-        self._device = device
-        self._last_y = None
-        self._correct = self._total = 0
-        self._confidence = []
-        self._entropy = []
-        self._track = entropy_fn is not None
-        self._entropy_fn = entropy_fn
-
-    def process_batch(self, batch):
-        if self._track:
-            x, y = _map_device(batch, self._device)
-            assert self._last_y is None
-            self._last_y = y
-            assert x.size(0) == y.size(0)
-            self._total += y.size(0)
-            return x
-        # batch = x
-        return batch.to(self._device)
-
-    def record_predictions(self, probs: torch.Tensor):
-        if self._track:
-            # record accuracy
-            assert probs.ndim == 2  # [N x C]
-            conf, preds = torch.max(probs, dim=1)
-            assert self._last_y is not None
-            self._correct += torch.eq(preds, self._last_y).sum().item()
-            self._last_y = None
-
-            # record confidence
-            self._confidence.extend(conf.tolist())
-            self._entropy.extend(self._entropy_fn(probs).sum(dim=-1).tolist())
-
-    def attach(self, engine: Engine):
-        if self._track:
-            engine.add_event_handler(Events.EPOCH_STARTED, self._reset)
-            engine.add_event_handler(Events.EPOCH_COMPLETED, self._flush)
-
-    def _flush(self, engine):
-        engine.state.pl_tracker['pl_acc'] = self._correct / self._total
-        engine.state.pl_tracker['confidence'] = np.array(self._confidence)
-        engine.state.pl_tracker['entropy'] = np.array(self._entropy)
-
-    def _reset(self, engine):
-        self._correct = self._total = 0
-        self._confidence = []
-        self._entropy = []
-        engine.state.pl_tracker = {}
-
-
 def soft_nll_loss(preds: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     r"""
     Calculates the soft negative log-likelihood loss
@@ -160,19 +150,27 @@ def create_semisupervised_trainer(model: nn.Module, optimiser,
                                   lloss_fn: _Loss_fn, uloss_fn: _Loss_fn,
                                   annealer: Annealer,
                                   train_iterable: WraparoundLoader,
-                                  tracker: PLTracker,
+                                  pl_saver: Optional[PLPredictionSaver] = None,
                                   use_soft_labels: bool = False,
                                   device: _DeviceType = None):
-
     def _step(_, batch):
-        x = tracker.process_batch(batch)
+        if isinstance(batch, (list, tuple)):
+            # don't have to map targets to GPU since we're saving it immediately
+            x, targets = batch
+            x = x.to(device)
+        else:
+            x, targets = batch.to(device), None
         # get pseudo-labels for this batch using eval mode
         with torch.no_grad():
             model.eval()
-            preds = model(x)
-            tracker.record_predictions(preds)
-            if not use_soft_labels:
-                preds = torch.argmax(preds, dim=1)
+            raw_preds = model(x)
+            if use_soft_labels:
+                # uloss_fn's second parameter expects a soft dist.
+                preds = raw_preds
+            else:
+                # uloss_fn's second parameter expects a sequence
+                # of class numbers
+                preds = torch.argmax(raw_preds, dim=1)
 
         # normal forward pass on pseudo_labels
         model.train()
@@ -190,10 +188,14 @@ def create_semisupervised_trainer(model: nn.Module, optimiser,
         optimiser.zero_grad()
         loss.backward()
         optimiser.step()
-        return loss.item()
+        return loss.item(), raw_preds, targets
     e = Engine(_step)
-    tracker.attach(e)
     annealer.attach(e)
+    if pl_saver is not None:
+        pl_saver.attach(
+            e,
+            output_transform=lambda x: (x[1], x[2])  # (raw_preds, targets)
+        )
     return e
 
 
@@ -205,7 +207,7 @@ class VanillaPLTrainer:
                  use_soft_labels: Optional[bool] = False,
                  patience: Optional[int] = None,
                  reload_best: Optional[bool] = False,
-                 track_pl_metrics: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+                 track_pl_metrics: Optional[str] = None,
                  T1: Optional[int] = 0,
                  T2: Optional[int] = 40,
                  step_interval: Optional[int] = 50,
@@ -228,11 +230,10 @@ class VanillaPLTrainer:
             patience (int, optional): if not `None`, then validation accuracy will be used to determine when to stop.
             reload_best (bool, optional): patience must be non-`None` if this is set to `True`: reloads the best model
                 according to validation accuracy at the end of training.
-            track_pl_metrics (Callable, optional): tracks the quality , uncertainty, and entropy of pseudo-labels
-                throughout the training epochs. :meth:`fit` will also return additional keys representing
-                these aforementioned metrics. This callable is expected to take in a tensor (output of model)
-                and return the (unreduced) entropy. E.g. :func:`~alr.utils.math.entropy`. If None, no tracking will
-                be done.
+            track_pl_metrics (str, optional): If a string is provided, then the training procedure will save
+                raw predictions and targets on the pool dataset at the *end* of each epoch in stage 1 and
+                while it is training *during* stage 2 in this directory. In other words, this lets you
+                rack the quality of pseudo-labels as it is training in stage 2.
             T1 (int, optional): when the weight coefficient starts kicking in. 0 implies it immediately starts
                 taking effect since; this is probably what you want -- the model is already warm-started.
             T2 (int, optional): when the weight coefficient starts plateauing. For example,
@@ -289,6 +290,7 @@ class VanillaPLTrainer:
             epochs = (epochs, epochs)
         assert len(epochs) == 2
         epoch1, epoch2 = epochs[0], epochs[1]
+
         # stage 1
         supervised_trainer = Trainer(
             self._model, self._lloss, self._optim,
@@ -296,20 +298,21 @@ class VanillaPLTrainer:
             reload_best=self._reload_best,
             device=self._device, *self._args, **self._kwargs
         )
+
         # until convergence
         supervised_history = supervised_trainer.fit(
             train_loader, val_loader, epochs=epoch1,
         )
 
-        history = {}
-
+        # before commencing stage 2, record the current PL predictions
         if self._track_pl_metrics is not None:
-            history['pre'] = {}
-            for k, v in _get_pl_metrics(
-                    self._model,
-                    PLTracker(entropy_fn=self._track_pl_metrics, device=self._device),
-                    pool_loader).items():
-                history['pre'][k] = v
+            save_pl_metrics = create_supervised_evaluator(
+                self._model, metrics=None, device=self._device
+            )
+            pl_saver = PLPredictionSaver(self._track_pl_metrics + "/stage1")
+            pl_saver.attach(save_pl_metrics)
+            save_pl_metrics.run(pool_loader)
+
         # stage 2
         pl_history = defaultdict(list)
         pbar = ProgressBar()
@@ -331,10 +334,6 @@ class VanillaPLTrainer:
                 f"epoch {engine.state.epoch}/{engine.state.max_epochs}\n"
                 f"\ttrain acc = {metrics['acc']}, train loss = {metrics['loss']}"
             )
-            if self._track_pl_metrics is not None:
-                pl_history["pl_acc"].append(engine.state.pl_tracker['pl_acc'])
-                pl_history["confidence"].append(engine.state.pl_tracker['confidence'])
-                pl_history["entropy"].append(engine.state.pl_tracker['entropy'])
             if val_loader is None:
                 return  # job done
             metrics = val_evaluator.run(val_loader).metrics
@@ -343,6 +342,7 @@ class VanillaPLTrainer:
             pbar.log_message(
                 f"\tval acc = {metrics['acc']}, val loss = {metrics['loss']}"
             )
+
         ssl_trainer = create_semisupervised_trainer(
             model=self._model,
             optimiser=getattr(torch.optim, self._optim)(
@@ -350,26 +350,29 @@ class VanillaPLTrainer:
             ), lloss_fn=self._lloss, uloss_fn=self._uloss,
             annealer=Annealer(step=1, T1=self._T1, T2=self._T2, step_interval=self._step_interval),
             train_iterable=WraparoundLoader(train_loader),
-            tracker=PLTracker(entropy_fn=self._track_pl_metrics, device=self._device),
+            pl_saver=(PLPredictionSaver(self._track_pl_metrics + "/stage2") if self._track_pl_metrics is not None else None),
             use_soft_labels=self._use_soft_labels,
-            device=self._device
+            device=self._device,
         )
         if val_loader is not None and self._patience:
             es = EarlyStopper(self._model, patience=self._patience, trainer=ssl_trainer, key='acc', mode='max')
             es.attach(val_evaluator)
+
         ssl_trainer.add_event_handler(Events.EPOCH_COMPLETED, _log_metrics)
-        pbar.attach(ssl_trainer, output_transform=lambda x: {'loss': x})
+        pbar.attach(ssl_trainer, output_transform=lambda x: {'loss': x[0]})
 
         ssl_trainer.run(
             pool_loader, max_epochs=epoch2,
             seed=np.random.randint(0, 1e6)
         )
+
         if val_loader is not None and self._patience and self._reload_best:
             es.reload_best()
 
-        history['stage1'] = {k: np.array(v) for k, v in supervised_history.items()}
-        history['stage2'] = {k: np.array(v) for k, v in pl_history.items()}
-        return history
+        return {
+            'stage1': {k: np.array(v) for k, v in supervised_history.items()},
+            'stage2': {k: np.array(v) for k, v in pl_history.items()}
+        }
 
     def evaluate(self, data_loader: torchdata.DataLoader) -> dict:
         evaluator = create_supervised_evaluator(
@@ -377,23 +380,3 @@ class VanillaPLTrainer:
             device=self._device
         )
         return evaluator.run(data_loader).metrics
-
-
-def _get_pl_metrics(model: nn.Module,
-                    tracker: PLTracker,
-                    loader: torchdata.DataLoader):
-    with torch.no_grad():
-        model.eval()
-        for batch in loader:
-            x = tracker.process_batch(batch)
-            tracker.record_predictions(model(x))
-    metrics = {
-        'pl_acc': np.array([tracker._correct / tracker._total]),
-        'confidence': np.array([tracker._confidence]),
-        'entropy': np.array([tracker._entropy]),
-    }
-    # reset tracker
-    tracker._correct = tracker._total = 0
-    tracker._confidence = []
-    tracker._entropy = []
-    return metrics
