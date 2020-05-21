@@ -20,8 +20,8 @@ from alr.utils._type_aliases import _DeviceType, _Loss_fn
 
 r"""
 todo(harry):
-    1. acc/quality BEFORE training with pseudo labels: currently only after first epoch.
-    2. thresholding capabilities
+    0. Acc PLTracker for val/test dataset
+    1. thresholding capabilities
 """
 
 
@@ -112,7 +112,7 @@ class PLTracker:
             engine.add_event_handler(Events.EPOCH_COMPLETED, self._flush)
 
     def _flush(self, engine):
-        engine.state.pl_tracker['acc'] = self._correct / self._total
+        engine.state.pl_tracker['pl_acc'] = self._correct / self._total
         engine.state.pl_tracker['confidence'] = self._confidence
         engine.state.pl_tracker['entropy'] = self._entropy
 
@@ -162,7 +162,8 @@ def create_semisupervised_trainer(model: nn.Module, optimiser,
                                   annealer: Annealer,
                                   train_iterable: WraparoundLoader,
                                   tracker: PLTracker,
-                                  use_soft_labels: bool = False, device: _DeviceType = None):
+                                  use_soft_labels: bool = False,
+                                  device: _DeviceType = None):
 
     def _step(_, batch):
         x = tracker.process_batch(batch)
@@ -301,8 +302,13 @@ class VanillaPLTrainer:
             train_loader, val_loader, epochs=epoch1,
         )
 
-        # todo(harry): record into supervised_history, the accuracy and uncertainty of pseudo-labels at this stage
-        #   because PLTracker only does it after the model has been trained for at least one epoch.
+        if self._track_pl_metrics is not None:
+            for k, v in _get_pl_metrics(
+                    self._model,
+                    PLTracker(entropy_fn=self._track_pl_metrics, device=self._device),
+                    train_loader).items():
+                assert k not in supervised_history
+                supervised_history[k] = v
 
         # stage 2
         pbar = ProgressBar()
@@ -331,8 +337,9 @@ class VanillaPLTrainer:
 
             # log PL tracking metrics
             if self._track_pl_metrics is not None:
-                history["pl_acc"].append(engine.state.pl_tracker['acc'])
+                history["pl_acc"].append(engine.state.pl_tracker['pl_acc'])
                 history["confidence"].append(engine.state.pl_tracker['confidence'])
+                history["entropy"].append(engine.state.pl_tracker['entropy'])
 
             if val_loader is None:
                 return  # job done
@@ -374,10 +381,6 @@ class VanillaPLTrainer:
         for k, v in supervised_history.items():
             v.extend(history[k])
 
-        if self._track_pl_metrics is not None:
-            supervised_history["pl_acc"] = history["pl_acc"]
-            supervised_history["confidence"] = history["confidence"]
-
         # return combined history
         return supervised_history
 
@@ -387,3 +390,20 @@ class VanillaPLTrainer:
             device=self._device
         )
         return evaluator.run(data_loader).metrics
+
+
+def _get_pl_metrics(model: nn.Module,
+                    tracker: PLTracker,
+                    loader: torchdata.DataLoader):
+    with torch.no_grad():
+        model.eval()
+        for batch in loader:
+            x = tracker.process_batch(batch)
+            tracker.record_predictions(model(x))
+    metrics = {
+        'pl_acc': [tracker._correct / tracker._total],
+        'confidence': [tracker._confidence],
+        'entropy': [tracker._entropy],
+    }
+    tracker._reset()
+    return metrics
