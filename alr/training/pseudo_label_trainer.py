@@ -405,5 +405,8 @@ def _get_pl_metrics(model: nn.Module,
         'confidence': [tracker._confidence],
         'entropy': [tracker._entropy],
     }
-    tracker._reset()
+    # reset tracker
+    tracker._correct = tracker._total = 0
+    tracker._confidence = []
+    tracker._entropy = []
     return metrics
