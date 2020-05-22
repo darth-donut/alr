@@ -224,3 +224,4 @@ docs/**/*.ipynb
 experiments/data
 docs/source/experiments/data
 .DS_Store
+/thesis
