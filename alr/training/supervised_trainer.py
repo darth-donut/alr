@@ -8,7 +8,7 @@ from ignite.contrib.handlers import ProgressBar
 import numpy as np
 
 from collections import defaultdict
-from typing import Optional, Dict
+from typing import Optional, Dict, Callable, List, Sequence
 
 from alr.utils._type_aliases import _DeviceType, _Loss_fn
 from alr.training.utils import EarlyStopper
@@ -51,7 +51,8 @@ class Trainer:
     def fit(self,
             train_loader: torchdata.DataLoader,
             val_loader: Optional[torchdata.DataLoader] = None,
-            epochs: Optional[int] = 1) -> Dict[str, list]:
+            epochs: Optional[int] = 1,
+            callbacks: Optional[Sequence[Callable]] = None) -> Dict[str, list]:
         if self._patience and val_loader is None:
             raise ValueError("If patience is specified, then val_loader must be provided in .fit().")
 
@@ -99,6 +100,10 @@ class Trainer:
             es = EarlyStopper(self._model, self._patience, trainer, key='acc', mode='max')
             es.attach(val_evaluator)
         trainer.add_event_handler(Events.EPOCH_COMPLETED, _log_metrics)
+        if callbacks is not None:
+            for c in callbacks:
+                trainer.add_event_handler(Events.EPOCH_COMPLETED, c)
+
         # pytorch-ignite v0.3.0's explicit seed parameter
         trainer.run(
             train_loader, max_epochs=epochs,

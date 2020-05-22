@@ -290,6 +290,16 @@ class VanillaPLTrainer:
             epochs = (epochs, epochs)
         assert len(epochs) == 2
         epoch1, epoch2 = epochs[0], epochs[1]
+        callbacks = None
+        if self._track_pl_metrics is not None:
+            save_pl_metrics = create_supervised_evaluator(
+                self._model, metrics=None, device=self._device
+            )
+            PLPredictionSaver(self._track_pl_metrics + "/stage1").attach(save_pl_metrics)
+
+            def _save_pl_metrics(_):
+                save_pl_metrics.run(pool_loader)
+            callbacks = [_save_pl_metrics]
 
         # stage 1
         supervised_trainer = Trainer(
@@ -301,17 +311,8 @@ class VanillaPLTrainer:
 
         # until convergence
         supervised_history = supervised_trainer.fit(
-            train_loader, val_loader, epochs=epoch1,
+            train_loader, val_loader, epochs=epoch1, callbacks=callbacks,
         )
-
-        # before commencing stage 2, record the current PL predictions
-        if self._track_pl_metrics is not None:
-            save_pl_metrics = create_supervised_evaluator(
-                self._model, metrics=None, device=self._device
-            )
-            pl_saver = PLPredictionSaver(self._track_pl_metrics + "/stage1")
-            pl_saver.attach(save_pl_metrics)
-            save_pl_metrics.run(pool_loader)
 
         # stage 2
         pl_history = defaultdict(list)
