@@ -33,6 +33,7 @@ class PLPredictionSaver:
         self._preds = []
         self._targets = []
         self._root = Path(root)
+        self._other_engine = None
         if self._root.is_dir():
             raise RuntimeError(f"{str(self._root)} already exists.")
 
@@ -40,6 +41,7 @@ class PLPredictionSaver:
                engine: Engine,
                output_transform: Callable[..., tuple] = lambda x: x):
         self._output_transform = output_transform
+        self._other_engine = engine
         engine.add_event_handler(Events.EPOCH_STARTED, self._reset)
         engine.add_event_handler(Events.EPOCH_COMPLETED, self._flush)
         engine.add_event_handler(Events.ITERATION_COMPLETED, self._parse)
@@ -49,12 +51,12 @@ class PLPredictionSaver:
         self._preds.append(pred.cpu().numpy())
         self._targets.append(target.cpu().numpy())
 
-    def _flush(self, engine: Engine):
+    def _flush(self, _):
         payload = {
             'preds': np.concatenate(self._preds, axis=0),
             'targets': np.concatenate(self._targets, axis=0),
         }
-        epoch = engine.state.epoch
+        epoch = self._other_engine.state.epoch
         dest = self._root
         dest.mkdir(parents=True, exist_ok=True)
         fname = dest / f"{str(epoch)}_pl_predictions.pkl"
@@ -65,6 +67,9 @@ class PLPredictionSaver:
     def _reset(self, _):
         self._preds = []
         self._targets = []
+
+    def global_step_from_engine(self, engine: Engine):
+        self._other_engine = engine
 
 
 class WraparoundLoader:
@@ -295,9 +300,14 @@ class VanillaPLTrainer:
             save_pl_metrics = create_supervised_evaluator(
                 self._model, metrics=None, device=self._device
             )
-            PLPredictionSaver(self._track_pl_metrics + "/stage1").attach(save_pl_metrics)
-
-            def _save_pl_metrics(_):
+            pps = PLPredictionSaver(
+                self._track_pl_metrics + "/stage1"
+            )
+            pps.attach(save_pl_metrics)
+            def _save_pl_metrics(e: Engine):
+                # epoch should be read from the engine that's training
+                # the model, not the evaluator defined above.
+                pps.global_step_from_engine(e)
                 save_pl_metrics.run(pool_loader)
             callbacks = [_save_pl_metrics]
 
