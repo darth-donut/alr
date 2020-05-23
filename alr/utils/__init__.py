@@ -19,7 +19,7 @@ __all__ = [
 ]
 
 
-def manual_seed(seed: Optional[int] = 42, det_cudnn: Optional[bool] = True) -> int:
+def manual_seed(seed: Optional[int] = 42, det_cudnn: Optional[bool] = False) -> int:
     r"""
     To ensure reproducibility, set the seeds and make cuDNN deterministic.
 
