@@ -145,10 +145,7 @@ class DataManager:
         idxs = self._a_fn(self._unlabelled, b)
         assert idxs.shape == (b,)
         labelled = self._unlabelled.label(idxs)
-        # TODO(optim): is there a better way to do this?
-        self._labelled = torchdata.ConcatDataset(
-            (self._labelled, labelled)
-        )
+        self.append_to_labelled(labelled)
 
     @property
     def n_labelled(self) -> int:
@@ -200,3 +197,19 @@ class DataManager:
         """
         self._unlabelled.reset()
         self._labelled = self._old_labelled
+
+    def append_to_labelled(self, dataset: torchdata.Dataset):
+        r"""
+        Logically appends given dataset to the labelled dataset. Again, this does not
+        physically modify the provided dataset.
+
+        Args:
+            dataset (torch.utils.data.Dataset): dataset object
+
+        Returns:
+            NoneType: None
+        """
+        # TODO(optim): is there a better way to do this?
+        self._labelled = torchdata.ConcatDataset(
+            (self._labelled, dataset)
+        )
