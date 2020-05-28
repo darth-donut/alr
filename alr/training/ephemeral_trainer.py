@@ -38,7 +38,8 @@ class PseudoLabelManager:
         self.acquired_sizes = []
 
     def attach(self, engine: Engine):
-        engine.add_event_handler(Events.EPOCH_COMPLETED, self._load_labels)
+        engine.add_event_handler(Events.STARTED, self._initialise)
+        engine.add_event_handler(Events.ITERATION_COMPLETED, self._load_labels)
 
     def _load_labels(self, engine: Engine):
         evaluator = create_supervised_evaluator(self._model, metrics=None, device=self._device)
@@ -56,6 +57,10 @@ class PseudoLabelManager:
             engine.state.pseudo_labelled_dataset = PseudoLabelDataset(confident_points, pseudo_labels)
         else:
             engine.state.pseudo_labelled_dataset = None
+
+    @staticmethod
+    def _initialise(engine: Engine):
+        engine.state.pseudo_labelled_dataset = None
 
 
 class PseudoLabelCollector:
