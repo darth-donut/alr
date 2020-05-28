@@ -2,13 +2,13 @@ import torch
 from torch import nn
 from ignite.engine import Engine, Events, \
     create_supervised_evaluator, create_supervised_trainer
-from ignite.metrics import Loss, Accuracy
+from ignite.metrics import Loss, Accuracy, RunningAverage
 import torch.utils.data as torchdata
 from ignite.contrib.handlers import ProgressBar
 import numpy as np
 
 from collections import defaultdict
-from typing import Optional, Dict, Callable, List, Sequence
+from typing import Optional, Dict, Callable, Sequence
 
 from alr.utils._type_aliases import _DeviceType, _Loss_fn
 from alr.training.utils import EarlyStopper
@@ -59,23 +59,19 @@ class Trainer:
         pbar = ProgressBar()
         history = defaultdict(list)
 
-        train_evaluator = create_supervised_evaluator(
-            self._model, metrics={'acc': Accuracy(), 'loss': Loss(self._loss)},
-            device=self._device
-        )
         val_evaluator = create_supervised_evaluator(
             self._model, metrics={'acc': Accuracy(), 'loss': Loss(self._loss)},
             device=self._device
         )
 
         def _log_metrics(engine: Engine):
-            # train loader - save to history and print metrics
-            metrics = train_evaluator.run(train_loader).metrics
-            history[f"train_acc"].append(metrics['acc'])
-            history[f"train_loss"].append(metrics['loss'])
+            # moving averages
+            train_acc, train_loss = engine.state.metrics['train_acc'], engine.state.metrics['train_loss']
+            history[f"train_acc"].append(train_acc)
+            history[f"train_loss"].append(train_loss)
             pbar.log_message(
                 f"epoch {engine.state.epoch}/{engine.state.max_epochs}\n"
-                f"\ttrain acc = {metrics['acc']}, train loss = {metrics['loss']}"
+                f"\ttrain acc = {train_acc}, train loss = {train_loss}"
             )
 
             if val_loader is None:
@@ -93,9 +89,13 @@ class Trainer:
 
         trainer = create_supervised_trainer(
             self._model, optimizer=self._optim,
-            loss_fn=self._loss, device=self._device
+            loss_fn=self._loss, device=self._device,
+            output_transform=lambda x, y, y_pred, loss: (loss.item(), y_pred, y),
         )
-        pbar.attach(trainer, output_transform=lambda x: {'loss': x})
+        pbar.attach(trainer, metric_names='all')
+        RunningAverage(Accuracy(output_transform=lambda x: (x[1], x[2]))).attach(trainer, 'train_acc')
+        RunningAverage(output_transform=lambda x: x[0]).attach(trainer, 'train_loss')
+
         if val_loader is not None and self._patience:
             es = EarlyStopper(self._model, self._patience, trainer, key='acc', mode='max')
             es.attach(val_evaluator)
