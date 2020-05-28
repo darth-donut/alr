@@ -1,7 +1,7 @@
 from collections import defaultdict
 
 from alr import ALRModel
-from alr.data import PseudoLabelDataset
+from alr.data import RelabelDataset, PseudoLabelDataset, UnlabelledDataset
 from alr.training.utils import EarlyStopper
 from alr.utils._type_aliases import _DeviceType, _Loss_fn
 import pickle
@@ -21,7 +21,7 @@ from alr.training.samplers import RandomFixedLengthSampler
 
 class PseudoLabelManager:
     def __init__(self,
-                 pool: torchdata.Dataset,
+                 pool: UnlabelledDataset,
                  model: nn.Module,
                  threshold: float,
                  save_to: Optional[str] = None,
@@ -56,7 +56,11 @@ class PseudoLabelManager:
         self.acquired_sizes.append(indices.shape[0])
         if indices.shape[0]:
             confident_points = torchdata.Subset(self._pool, indices)
-            engine.state.pseudo_labelled_dataset = PseudoLabelDataset(confident_points, pseudo_labels)
+            if self._pool.debug:
+                # pool returns target labels too
+                engine.state.pseudo_labelled_dataset = RelabelDataset(confident_points, pseudo_labels)
+            else:
+                engine.state.pseudo_labelled_dataset = PseudoLabelDataset(confident_points, pseudo_labels)
         else:
             engine.state.pseudo_labelled_dataset = None
 
@@ -184,7 +188,7 @@ def create_pseudo_label_trainer(model: ALRModel, loss: _Loss_fn, optimiser: str,
 class EphemeralTrainer:
     def __init__(self,
                  model: ALRModel,
-                 pool: torchdata.Dataset,
+                 pool: UnlabelledDataset,
                  loss: _Loss_fn, optimiser: str,
                  threshold: float,
                  random_fixed_length_sampler_length: Optional[int] = None,
