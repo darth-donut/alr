@@ -35,6 +35,7 @@ class PseudoLabelManager:
         self._save_to = save_to
         self._device = device
         self._threshold = threshold
+        self.acquired_sizes = []
 
     def attach(self, engine: Engine):
         engine.add_event_handler(Events.EPOCH_COMPLETED, self._load_labels)
@@ -49,6 +50,7 @@ class PseudoLabelManager:
         indices, pseudo_labels = \
             evaluator.state.pl_indices.cpu().numpy(), \
             evaluator.state.pl_plabs.cpu().numpy()
+        self.acquired_sizes.append(indices.shape[0])
         if indices.shape[0]:
             confident_points = torchdata.Subset(self._pool, indices)
             engine.state.pseudo_labelled_dataset = PseudoLabelDataset(confident_points, pseudo_labels)
@@ -146,7 +148,8 @@ def create_pseudo_label_trainer(model, loss, optimiser,
     def _step(engine: Engine, _):
         trainer = Trainer(model, loss, optimiser, patience, reload_best, device=device, *args, **kwargs)
         train_ds = train_loader.dataset
-        if (pld := engine.state.pseudo_labelled_dataset) is not None:
+        pld = engine.state.pseudo_labelled_dataset
+        if pld is not None:
             train_ds = torchdata.ConcatDataset((train_ds, pld))
         if rfls_len:
             _update_dataloader(
@@ -258,6 +261,8 @@ class EphemeralTrainer:
         )
         if val_loader is not None and self._patience and self._reload_best:
             es.reload_best()
+
+        history['train_size'] = np.array(pseudo_label_manager.acquired_sizes) + len(train_loader.dataset)
         return history
 
     def evaluate(self, data_loader: torchdata.DataLoader) -> dict:
