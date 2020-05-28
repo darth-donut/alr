@@ -213,3 +213,48 @@ class DataManager:
         self._labelled = torchdata.ConcatDataset(
             (self._labelled, dataset)
         )
+
+
+class PseudoLabelDataset(torchdata.Dataset):
+    def __init__(self, dataset: torchdata.Dataset, pseudo_labels: Sequence):
+        r"""
+        Provides dataset with pseudo-labels. Dataset's `__getitem__` is expected to
+        return x only (i.e. without targets). Use :class:`RelabelDataset` if
+        dataset is labelled.
+
+        Args:
+            dataset (torch.utils.data.Dataset): dataset object
+            pseudo_labels (Sequence): pseudo-labels
+        """
+        assert len(pseudo_labels) == len(dataset)
+        self._dataset = dataset
+        self._labels = pseudo_labels
+
+    def __len__(self):
+        return len(self._dataset)
+
+    def __getitem__(self, idx):
+        return self._dataset[idx], self._labels[idx]
+
+
+class RelabelDataset(torchdata.Dataset):
+    def __init__(self, dataset: torchdata.Dataset, labels: Sequence):
+        r"""
+        Overrides dataset labels. Dataset's `__getitem__` is expected to
+        return (x, y) (i.e. with targets). Use :class:`PseudoLabelDataset` if
+        dataset in unlabelled.
+
+        Args:
+            dataset (torch.utils.data.Dataset): dataset object
+            labels (Sequence): new labels
+        """
+        assert len(labels) == len(dataset)
+        self._dataset = dataset
+        self._labels = labels
+
+    def __len__(self):
+        return len(self._dataset)
+
+    def __getitem__(self, idx):
+        return self._dataset[idx][0], self._labels[idx]
+
