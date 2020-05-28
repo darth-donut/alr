@@ -154,22 +154,21 @@ def create_pseudo_label_trainer(model: ALRModel, loss: _Loss_fn, optimiser: str,
                                 *args, **kwargs):
     def _step(engine: Engine, _):
         model.reset_weights()
+        loader = train_loader
         trainer = Trainer(model, loss, optimiser, patience, reload_best, device=device, *args, **kwargs)
-        train_ds = train_loader.dataset
+        train_ds = loader.dataset
         pld = engine.state.pseudo_labelled_dataset
         if pld is not None:
             train_ds = torchdata.ConcatDataset((train_ds, pld))
-        if rfls_len:
-            _update_dataloader(
-                train_loader, train_ds,
-                RandomFixedLengthSampler(train_ds, length=rfls_len, shuffle=True)
-            )
-        else:
-            _update_dataloader(
-                train_loader, train_ds,
-            )
+            if rfls_len:
+                loader = _update_dataloader(
+                    loader, train_ds,
+                    RandomFixedLengthSampler(train_ds, length=rfls_len, shuffle=True)
+                )
+            else:
+                loader = _update_dataloader(loader, train_ds)
         history = trainer.fit(
-            train_loader, val_loader=val_loader,
+            loader, val_loader=val_loader,
             epochs=epochs,
         )
         # if early stopping was applied w/ patience, then the actual train acc and loss should be
