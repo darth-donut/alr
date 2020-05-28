@@ -234,7 +234,7 @@ class EphemeralTrainer:
             history[f"train_loss"].append(train_loss)
             history[f"train_acc"].append(train_acc)
             pbar.log_message(
-                f"epoch {engine.state.epoch}/{engine.state.max_epochs}\n"
+                f"Eph. iteration {engine.state.epoch}/{engine.state.max_epochs}\n"
                 f"\ttrain acc = {train_acc}, train loss = {train_loss}"
             )
             if val_loader is None:
