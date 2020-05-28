@@ -157,24 +157,30 @@ def create_pseudo_label_trainer(model: ALRModel, loss: _Loss_fn, optimiser: str,
                                 epochs: Optional[int] = 1, device: _DeviceType = None,
                                 *args, **kwargs):
     def _step(engine: Engine, _):
+        # always reset weights
         model.reset_weights()
-        loader = train_loader
-        trainer = Trainer(model, loss, optimiser, patience, reload_best, device=device, *args, **kwargs)
-        train_ds = loader.dataset
+
+        # update loader accordingly: if pld is not none, concatenate them
+        new_loader = train_loader
         pld = engine.state.pseudo_labelled_dataset
         if pld is not None:
-            train_ds = torchdata.ConcatDataset((train_ds, pld))
+            train_ds = torchdata.ConcatDataset((train_loader.dataset, pld))
+            # update dataloader's dataset attribute
             if rfls_len:
-                loader = _update_dataloader(
-                    loader, train_ds,
+                new_loader = _update_dataloader(
+                    train_loader, train_ds,
                     RandomFixedLengthSampler(train_ds, length=rfls_len, shuffle=True)
                 )
             else:
-                loader = _update_dataloader(loader, train_ds)
+                new_loader = _update_dataloader(train_loader, train_ds)
+
+        # begin supervised training
+        trainer = Trainer(model, loss, optimiser, patience, reload_best, device=device, *args, **kwargs)
         history = trainer.fit(
-            loader, val_loader=val_loader,
+            new_loader, val_loader=val_loader,
             epochs=epochs,
         )
+
         # if early stopping was applied w/ patience, then the actual train acc and loss should be
         # -patience from the final loss/acc UNLESS we reached the maximum number of epochs.
         if patience and len(history['train_loss']) != epochs:
