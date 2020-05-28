@@ -243,7 +243,7 @@ class EphemeralTrainer:
             device=self._device, **self._pool_loader_kwargs
         )
         trainer = create_pseudo_label_trainer(
-            model=self._model, loss=self._loss, optimser=self._optimiser,
+            model=self._model, loss=self._loss, optimiser=self._optimiser,
             train_loader=train_loader, val_loader=val_loader,
             pseudo_label_manager=pseudo_label_manager, rfls_len=self._rfls_len,
             patience=self._patience, reload_best=self._reload_best,
