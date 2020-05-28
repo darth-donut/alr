@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+from alr import ALRModel
 from alr.data import PseudoLabelDataset
 from alr.training.utils import EarlyStopper
 from alr.utils._type_aliases import _DeviceType, _Loss_fn
@@ -39,6 +40,7 @@ class PseudoLabelManager:
 
     def attach(self, engine: Engine):
         engine.add_event_handler(Events.STARTED, self._initialise)
+        # could also be EPOCH_COMPLETED since there's only one iteration in each epoch
         engine.add_event_handler(Events.ITERATION_COMPLETED, self._load_labels)
 
     def _load_labels(self, engine: Engine):
@@ -143,14 +145,15 @@ def _update_dataloader(loader: torchdata.DataLoader,
     return torchdata.DataLoader(**kwargs)
 
 
-def create_pseudo_label_trainer(model, loss, optimiser,
-                                train_loader, val_loader,
+def create_pseudo_label_trainer(model: ALRModel, loss: _Loss_fn, optimiser: str,
+                                train_loader: torchdata.DataLoader, val_loader: torchdata.DataLoader,
                                 pseudo_label_manager: PseudoLabelManager,
                                 rfls_len: Optional[int] = None,
                                 patience: Optional[int] = None, reload_best: Optional[bool] = None,
                                 epochs: Optional[int] = 1, device: _DeviceType = None,
                                 *args, **kwargs):
     def _step(engine: Engine, _):
+        model.reset_weights()
         trainer = Trainer(model, loss, optimiser, patience, reload_best, device=device, *args, **kwargs)
         train_ds = train_loader.dataset
         pld = engine.state.pseudo_labelled_dataset
@@ -181,7 +184,8 @@ def create_pseudo_label_trainer(model, loss, optimiser,
 
 class EphemeralTrainer:
     def __init__(self,
-                 pool: torchdata.Dataset, model: nn.Module,
+                 model: ALRModel,
+                 pool: torchdata.Dataset,
                  loss: _Loss_fn, optimiser: str,
                  threshold: float,
                  random_fixed_length_sampler_length: Optional[int] = None,
