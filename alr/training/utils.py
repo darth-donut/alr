@@ -10,6 +10,8 @@ from ignite.engine import Engine, Events
 
 from typing import Optional, Callable
 
+from alr.utils.math import entropy
+
 
 class EarlyStopper:
     def __init__(self, model: nn.Module,
@@ -76,7 +78,9 @@ class EarlyStopper:
 
 class PLPredictionSaver:
     def __init__(self,
-                 log_dir: Optional[str] = None):
+                 log_dir: str,
+                 compact: Optional[bool] = True,
+                 pred_transform: Optional[Callable[[np.ndarray], np.ndarray]] = lambda x: np.exp(x)):
         self._output_transform = lambda x: x
         self._preds = []
         self._targets = []
@@ -84,6 +88,8 @@ class PLPredictionSaver:
             self._log_dir = Path(log_dir)
             self._log_dir.mkdir(parents=True, exist_ok=True)
         self._other_engine = None
+        self._compact = compact
+        self._pred_transform = pred_transform
 
     def attach(self,
                engine: Engine,
@@ -100,10 +106,21 @@ class PLPredictionSaver:
         self._targets.append(target.cpu().numpy())
 
     def _flush(self, _):
-        payload = {
-            'preds': np.concatenate(self._preds, axis=0),
-            'targets': np.concatenate(self._targets, axis=0),
-        }
+        preds_N_C = self._pred_transform(np.concatenate(self._preds, axis=0))
+        targets_N = np.concatenate(self._targets, axis=0)
+        if self._compact:
+            payload = {
+                'ece': _expected_calibration_error(preds_N_C, targets_N),
+                'acc-conf': _confidence_accuracy(preds_N_C, targets_N),
+                'conf-thresh': _confidence_threshold(preds_N_C),
+                'entropy': _entropy(preds_N_C),
+                'accuracy': _accuracy(preds_N_C, targets_N),
+            }
+        else:
+            payload = {
+                'preds': preds_N_C,
+                'targets': targets_N,
+            }
         epoch = self._other_engine.state.epoch
         fname = self._log_dir / f"{str(epoch)}_pl_predictions.pkl"
         assert not fname.exists(), "You've done goofed"
@@ -117,3 +134,70 @@ class PLPredictionSaver:
     def global_step_from_engine(self, engine: Engine):
         self._other_engine = engine
 
+
+def _confidence_threshold(preds_N_C: np.ndarray):
+    x = np.linspace(0, 1, num=100)
+    y = np.empty(shape=x.shape[0])
+    for idx, thresh in enumerate(x):
+        y[idx] = np.mean(np.max(preds_N_C, axis=-1) >= thresh)
+    return x, y
+
+
+def _confidence_accuracy(preds_N_C: np.ndarray, targets_N: np.ndarray):
+    width = .1
+    # confidence bin
+    bins = np.arange(0, 1 + width, width)
+    # accuracy
+    y = np.empty(shape=(len(bins) - 1))
+    counts = np.zeros_like(y)
+    class_N = preds_N_C.argmax(axis=-1)
+    probs_N = np.max(preds_N_C, axis=-1)
+
+    for idx, b in enumerate(bins[1:]):
+        low, high = bins[idx], b
+        mask = (low < probs_N) & (probs_N <= high)
+        if mask.any():
+            y[idx] = np.equal(class_N[mask], targets_N[mask]).mean()
+            counts[idx] = mask.sum()
+        else:
+            y[idx] = np.nan
+    return bins, y, counts
+
+
+def _entropy(preds_N_C: np.ndarray):
+    ent_N = entropy(
+        torch.from_numpy(preds_N_C), mode='softmax'
+    ).numpy().sum(axis=-1)
+    return ent_N
+
+
+def _accuracy(preds_N_C, targets_N):
+    return np.equal(preds_N_C.argmax(axis=-1), targets_N).mean()
+
+
+def _expected_calibration_error(preds_N_C: np.ndarray, targets_N: np.ndarray):
+    # https://arxiv.org/pdf/1706.04599.pdf
+    width = .1
+
+    N = preds_N_C.shape[0]
+    bins = np.arange(0, 1 + width, width)
+    acc = np.zeros(shape=(len(bins) - 1))
+    counts = np.zeros_like(acc)
+    conf = np.zeros_like(acc)
+
+    class_N = preds_N_C.argmax(axis=-1)
+    probs_N = np.max(preds_N_C, axis=-1)
+
+    for idx, b in enumerate(bins[1:]):
+        low, high = bins[idx], b
+        mask = (low < probs_N) & (probs_N <= high)
+        if mask.any():
+            acc[idx] = np.equal(class_N[mask], targets_N[mask]).mean()
+            counts[idx] = mask.sum()
+            # average confidence in bin (low, high]
+            conf[idx] = np.mean(probs_N[mask])
+
+    res = np.abs(acc - conf) * counts
+    assert res.shape == (len(bins) - 1,)
+    assert np.isfinite(res).all()
+    return np.sum(res) / N
