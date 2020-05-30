@@ -30,6 +30,8 @@ class EarlyStopper:
         assert not list(Path(str(self._tmpdir.name)).rglob("*.pth"))
         self._chkpt_handler = None
 
+        self._reload_called = False
+
     def attach(self, engine: Engine):
         r"""
         Attach an early stopper to engine that will terminate the provided trainer
@@ -60,12 +62,16 @@ class EarlyStopper:
         return engine.state.metrics[self._key] * self._mode
 
     def reload_best(self):
+        if self._reload_called:
+            raise RuntimeError("Cannot reload more than once.")
         if self._chkpt_handler is None or self._chkpt_handler.last_checkpoint is None:
             raise RuntimeError("Cannot reload model until it has been trained for at least one epoch.")
         self._model.load_state_dict(
             torch.load(str(self._chkpt_handler.last_checkpoint)),
             strict=True
         )
+        self._tmpdir.cleanup()
+        self._reload_called = True
 
 
 class PLPredictionSaver:
