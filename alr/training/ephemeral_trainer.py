@@ -2,10 +2,8 @@ from collections import defaultdict
 
 from alr import ALRModel
 from alr.data import RelabelDataset, PseudoLabelDataset, UnlabelledDataset
-from alr.training.utils import EarlyStopper
+from alr.training.utils import EarlyStopper, PLPredictionSaver
 from alr.utils._type_aliases import _DeviceType, _Loss_fn
-import pickle
-from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -24,7 +22,7 @@ class PseudoLabelManager:
                  pool: UnlabelledDataset,
                  model: nn.Module,
                  threshold: float,
-                 save_to: Optional[str] = None,
+                 log_dir: Optional[str] = None,
                  device: _DeviceType = None,
                  **kwargs):
         bs = kwargs.pop('batch_size', 1024)
@@ -33,7 +31,7 @@ class PseudoLabelManager:
         self._pool = pool
         self._loader = torchdata.DataLoader(pool, batch_size=bs, shuffle=shuffle, **kwargs)
         self._model = model
-        self._save_to = save_to
+        self._log_dir = log_dir
         self._device = device
         self._threshold = threshold
         self.acquired_sizes = []
@@ -45,10 +43,11 @@ class PseudoLabelManager:
 
     def _load_labels(self, engine: Engine):
         evaluator = create_supervised_evaluator(self._model, metrics=None, device=self._device)
-        PseudoLabelCollector(
-            self._threshold, save_to=self._save_to,
-            iteration=engine.state.epoch
-        ).attach(evaluator, batch_size=self._loader.batch_size)
+        plc = PseudoLabelCollector(
+            self._threshold, log_dir=self._log_dir,
+        )
+        plc.attach(evaluator, batch_size=self._loader.batch_size)
+        plc.global_step_from_engine(engine)
         evaluator.run(self._loader)
         indices, pseudo_labels = \
             evaluator.state.pl_indices.cpu().numpy(), \
@@ -72,8 +71,7 @@ class PseudoLabelManager:
 class PseudoLabelCollector:
     def __init__(self,
                  threshold: float,
-                 save_to: Optional[str] = None,
-                 iteration: Optional[int] = None,
+                 log_dir: Optional[str] = None,
                  pred_transform=lambda x: x.exp()):
         self._indices = []
         self._plabs = []
@@ -81,13 +79,7 @@ class PseudoLabelCollector:
         self._thresh = threshold
         self._targets = []
         self._preds = []
-        if save_to is not None:
-            assert iteration is not None
-            self._save_to = Path(save_to)
-            self._save_to.mkdir(parents=True, exist_ok=True)
-        else:
-            self._save_to = None
-        self._iteration = iteration
+        self._saver = PLPredictionSaver(log_dir)
         self._batch_size = None
 
     def _parse(self, engine: Engine):
@@ -95,9 +87,6 @@ class PseudoLabelCollector:
         # state.iteration starts with 1
         iteration = engine.state.iteration - 1
         offset = iteration * self._batch_size
-
-        self._targets.append(targets.cpu().numpy())
-        self._preds.append(preds.cpu().numpy())
         with torch.no_grad():
             preds = self._pred_transform(preds)
             preds_max, plabs = torch.max(preds, dim=-1)
@@ -108,29 +97,34 @@ class PseudoLabelCollector:
                 self._indices.append(mask + offset)
 
     def _flush(self, engine: Engine):
-        # save to memory
         if self._indices and self._plabs:
             engine.state.pl_indices = torch.cat(self._indices)
             engine.state.pl_plabs = torch.cat(self._plabs)
         else:
             engine.state.pl_indices = torch.Tensor([])
             engine.state.pl_plabs = torch.Tensor([])
+        self._indices = []
+        self._plabs = []
 
-        # save to file
-        if self._save_to is not None:
-            fname = self._save_to / f"{self._iteration}_pl_predictions.pkl"
-            assert not fname.exists(), "You've done goofed."
-            with open(fname, "wb") as fp:
-                payload = {
-                    'preds': np.concatenate(self._preds, axis=0),
-                    'targets': np.concatenate(self._targets, axis=0),
-                }
-                pickle.dump(payload, fp)
+    def attach(self, engine: Engine, batch_size: int, output_transform=lambda x: x):
+        r"""
 
-    def attach(self, engine: Engine, batch_size: int):
+        Args:
+            engine (Engine): ignite engine object
+            batch_size (int): engine's batch size
+            output_transform (Callable): if engine.state.output is not (preds, target),
+                then output_transform should return aforementioned tuple.
+
+        Returns:
+            NoneType: None
+        """
         engine.add_event_handler(Events.ITERATION_COMPLETED, self._parse)
         engine.add_event_handler(Events.COMPLETED, self._flush)
         self._batch_size = batch_size
+        self._saver.attach(engine, output_transform=output_transform)
+
+    def global_step_from_engine(self, engine: Engine):
+        self._saver.global_step_from_engine(engine)
 
 
 def _update_dataloader(loader: torchdata.DataLoader,
@@ -257,7 +251,7 @@ class EphemeralTrainer:
 
         pseudo_label_manager = PseudoLabelManager(
             pool=self._pool, model=self._model,
-            threshold=self._threshold, save_to=self._root,
+            threshold=self._threshold, log_dir=self._root,
             device=self._device, **self._pool_loader_kwargs
         )
         trainer = create_pseudo_label_trainer(

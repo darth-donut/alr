@@ -1,3 +1,6 @@
+import pickle
+
+import numpy as np
 import torch
 from torch import nn
 from ignite.handlers import EarlyStopping, ModelCheckpoint, global_step_from_engine
@@ -5,7 +8,7 @@ import tempfile
 from pathlib import Path
 from ignite.engine import Engine, Events
 
-from typing import Optional
+from typing import Optional, Callable
 
 
 class EarlyStopper:
@@ -63,3 +66,48 @@ class EarlyStopper:
             torch.load(str(self._chkpt_handler.last_checkpoint)),
             strict=True
         )
+
+
+class PLPredictionSaver:
+    def __init__(self,
+                 log_dir: Optional[str] = None):
+        self._output_transform = lambda x: x
+        self._preds = []
+        self._targets = []
+        if log_dir:
+            self._log_dir = Path(log_dir)
+            self._log_dir.mkdir(parents=True, exist_ok=True)
+        self._other_engine = None
+
+    def attach(self,
+               engine: Engine,
+               output_transform: Callable[..., tuple] = lambda x: x):
+        self._output_transform = output_transform
+        self._other_engine = engine
+        engine.add_event_handler(Events.EPOCH_STARTED, self._reset)
+        engine.add_event_handler(Events.EPOCH_COMPLETED, self._flush)
+        engine.add_event_handler(Events.ITERATION_COMPLETED, self._parse)
+
+    def _parse(self, engine: Engine):
+        pred, target = self._output_transform(engine.state.output)
+        self._preds.append(pred.cpu().numpy())
+        self._targets.append(target.cpu().numpy())
+
+    def _flush(self, _):
+        payload = {
+            'preds': np.concatenate(self._preds, axis=0),
+            'targets': np.concatenate(self._targets, axis=0),
+        }
+        epoch = self._other_engine.state.epoch
+        fname = self._log_dir / f"{str(epoch)}_pl_predictions.pkl"
+        assert not fname.exists(), "You've done goofed"
+        with open(fname, "wb") as fp:
+            pickle.dump(payload, fp)
+
+    def _reset(self, _):
+        self._preds = []
+        self._targets = []
+
+    def global_step_from_engine(self, engine: Engine):
+        self._other_engine = engine
+

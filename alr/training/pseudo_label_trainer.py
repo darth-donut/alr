@@ -1,75 +1,21 @@
 from collections import defaultdict
-from typing import Optional, Dict, Sequence, Union, Callable
+from typing import Optional, Dict, Sequence, Union
 
 import numpy as np
-import pickle
 import torch
-import torch.nn.functional as F
 import torch.utils.data as torchdata
 from ignite.contrib.handlers import ProgressBar
 from ignite.engine import Engine, Events, \
     create_supervised_evaluator
 from ignite.metrics import Loss, Accuracy
 from torch import nn
-from pathlib import Path
 
 from alr.data import UnlabelledDataset
 from alr.training import Trainer
-from alr.training.utils import EarlyStopper
+from alr.training.utils import EarlyStopper, PLPredictionSaver
 from alr.utils import _map_device
 from alr.utils.math import cross_entropy
 from alr.utils._type_aliases import _DeviceType, _Loss_fn
-
-r"""
-todo(harry):
-    1. thresholding capabilities
-"""
-
-
-class PLPredictionSaver:
-    def __init__(self,
-                 root: Optional[str] = "pl_metrics"):
-        self._output_transform = lambda x: x
-        self._preds = []
-        self._targets = []
-        self._root = Path(root)
-        self._other_engine = None
-        if self._root.is_dir():
-            raise RuntimeError(f"{str(self._root)} already exists.")
-
-    def attach(self,
-               engine: Engine,
-               output_transform: Callable[..., tuple] = lambda x: x):
-        self._output_transform = output_transform
-        self._other_engine = engine
-        engine.add_event_handler(Events.EPOCH_STARTED, self._reset)
-        engine.add_event_handler(Events.EPOCH_COMPLETED, self._flush)
-        engine.add_event_handler(Events.ITERATION_COMPLETED, self._parse)
-
-    def _parse(self, engine: Engine):
-        pred, target = self._output_transform(engine.state.output)
-        self._preds.append(pred.cpu().numpy())
-        self._targets.append(target.cpu().numpy())
-
-    def _flush(self, _):
-        payload = {
-            'preds': np.concatenate(self._preds, axis=0),
-            'targets': np.concatenate(self._targets, axis=0),
-        }
-        epoch = self._other_engine.state.epoch
-        dest = self._root
-        dest.mkdir(parents=True, exist_ok=True)
-        fname = dest / f"{str(epoch)}_pl_predictions.pkl"
-        assert not fname.exists(), "You've done goofed"
-        with open(fname, "wb") as fp:
-            pickle.dump(payload, fp)
-
-    def _reset(self, _):
-        self._preds = []
-        self._targets = []
-
-    def global_step_from_engine(self, engine: Engine):
-        self._other_engine = engine
 
 
 class WraparoundLoader:
@@ -301,7 +247,7 @@ class VanillaPLTrainer:
                 self._model, metrics=None, device=self._device
             )
             pps = PLPredictionSaver(
-                self._track_pl_metrics + "/stage1"
+                log_dir=(self._track_pl_metrics + "/stage1")
             )
             pps.attach(save_pl_metrics)
             def _save_pl_metrics(e: Engine):
