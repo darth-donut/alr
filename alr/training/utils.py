@@ -80,7 +80,7 @@ class PLPredictionSaver:
     def __init__(self,
                  log_dir: str,
                  compact: Optional[bool] = True,
-                 pred_transform: Optional[Callable[[np.ndarray], np.ndarray]] = lambda x: np.exp(x)):
+                 pred_transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = lambda x: x.exp()):
         self._output_transform = lambda x: x
         self._preds = []
         self._targets = []
@@ -102,16 +102,17 @@ class PLPredictionSaver:
 
     def _parse(self, engine: Engine):
         pred, target = self._output_transform(engine.state.output)
-        self._preds.append(pred.cpu().numpy())
-        self._targets.append(target.cpu().numpy())
+        self._preds.append(pred.detach().cpu())
+        self._targets.append(target.detach().cpu())
 
     def _flush(self, _):
-        preds_N_C = self._pred_transform(np.concatenate(self._preds, axis=0))
-        targets_N = np.concatenate(self._targets, axis=0)
+        preds_N_C = self._pred_transform(torch.cat(self._preds, dim=0)).numpy()
+        assert preds_N_C.ndim == 2
+        targets_N = torch.cat(self._targets, dim=0).numpy()
+        assert targets_N.ndim == 1 and targets_N.shape[0] == preds_N_C.shape[0]
         if self._compact:
             payload = {
                 'ece': _expected_calibration_error(preds_N_C, targets_N),
-                'acc-conf': _confidence_accuracy(preds_N_C, targets_N),
                 'conf-thresh': _confidence_threshold(preds_N_C),
                 'entropy': _entropy(preds_N_C),
                 'accuracy': _accuracy(preds_N_C, targets_N),
@@ -141,27 +142,6 @@ def _confidence_threshold(preds_N_C: np.ndarray):
     for idx, thresh in enumerate(x):
         y[idx] = np.mean(np.max(preds_N_C, axis=-1) >= thresh)
     return x, y
-
-
-def _confidence_accuracy(preds_N_C: np.ndarray, targets_N: np.ndarray):
-    width = .1
-    # confidence bin
-    bins = np.arange(0, 1 + width, width)
-    # accuracy
-    y = np.empty(shape=(len(bins) - 1))
-    counts = np.zeros_like(y)
-    class_N = preds_N_C.argmax(axis=-1)
-    probs_N = np.max(preds_N_C, axis=-1)
-
-    for idx, b in enumerate(bins[1:]):
-        low, high = bins[idx], b
-        mask = (low < probs_N) & (probs_N <= high)
-        if mask.any():
-            y[idx] = np.equal(class_N[mask], targets_N[mask]).mean()
-            counts[idx] = mask.sum()
-        else:
-            y[idx] = np.nan
-    return bins, y, counts
 
 
 def _entropy(preds_N_C: np.ndarray):
@@ -200,4 +180,5 @@ def _expected_calibration_error(preds_N_C: np.ndarray, targets_N: np.ndarray):
     res = np.abs(acc - conf) * counts
     assert res.shape == (len(bins) - 1,)
     assert np.isfinite(res).all()
-    return np.sum(res) / N
+
+    return bins, acc, counts, conf, np.sum(res) / N

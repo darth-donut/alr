@@ -4,7 +4,7 @@ from alr import ALRModel
 from alr.data import RelabelDataset, PseudoLabelDataset, UnlabelledDataset
 from alr.training.utils import EarlyStopper, PLPredictionSaver
 from alr.utils._type_aliases import _DeviceType, _Loss_fn
-from typing import Optional
+from typing import Optional, Callable
 
 import numpy as np
 import torch
@@ -72,21 +72,22 @@ class PseudoLabelCollector:
     def __init__(self,
                  threshold: float,
                  log_dir: Optional[str] = None,
-                 pred_transform=lambda x: x.exp()):
+                 pred_transform: Callable[[torch.Tensor], torch.Tensor] = lambda x: x.exp()):
         self._indices = []
         self._plabs = []
         self._pred_transform = pred_transform
+        self._output_transform = lambda x: x
         self._thresh = threshold
         self._targets = []
         self._preds = []
         if log_dir:
-            self._saver = PLPredictionSaver(log_dir)
+            self._saver = PLPredictionSaver(log_dir, pred_transform=pred_transform)
         else:
             self._saver = None
         self._batch_size = None
 
     def _parse(self, engine: Engine):
-        preds, targets = engine.state.output
+        preds, targets = self._output_transform(engine.state.output)
         # state.iteration starts with 1
         iteration = engine.state.iteration - 1
         offset = iteration * self._batch_size
@@ -123,6 +124,7 @@ class PseudoLabelCollector:
         """
         engine.add_event_handler(Events.ITERATION_COMPLETED, self._parse)
         engine.add_event_handler(Events.COMPLETED, self._flush)
+        self._output_transform = output_transform
         self._batch_size = batch_size
         if self._saver:
             self._saver.attach(engine, output_transform=output_transform)
