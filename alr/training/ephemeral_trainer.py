@@ -79,7 +79,10 @@ class PseudoLabelCollector:
         self._thresh = threshold
         self._targets = []
         self._preds = []
-        self._saver = PLPredictionSaver(log_dir)
+        if log_dir:
+            self._saver = PLPredictionSaver(log_dir)
+        else:
+            self._saver = None
         self._batch_size = None
 
     def _parse(self, engine: Engine):
@@ -121,10 +124,12 @@ class PseudoLabelCollector:
         engine.add_event_handler(Events.ITERATION_COMPLETED, self._parse)
         engine.add_event_handler(Events.COMPLETED, self._flush)
         self._batch_size = batch_size
-        self._saver.attach(engine, output_transform=output_transform)
+        if self._saver:
+            self._saver.attach(engine, output_transform=output_transform)
 
     def global_step_from_engine(self, engine: Engine):
-        self._saver.global_step_from_engine(engine)
+        if self._saver:
+            self._saver.global_step_from_engine(engine)
 
 
 def _update_dataloader(loader: torchdata.DataLoader,
