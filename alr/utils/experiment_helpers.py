@@ -1,13 +1,11 @@
-from collections import namedtuple
-from typing import Optional, Union, Tuple
+from typing import Tuple
 
 import numpy as np
 import torch
 import torch.utils.data as torchdata
 
 # type aliases
-_DeviceType = Optional[Union[str, torch.device]]
-_ActiveLearningDataset = namedtuple('ActiveLearningDataset', 'training unlabelled')
+from alr.utils._type_aliases import _ActiveLearningDataset
 
 
 def stratified_partition(ds: torchdata.Dataset, classes: int, size: int) \

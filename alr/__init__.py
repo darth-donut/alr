@@ -17,7 +17,8 @@ from torch import nn
 
 from alr.acquisition import AcquisitionFunction
 from alr.modules.dropout import replace_dropout
-from alr.utils import _DeviceType, range_progress_bar, progress_bar
+from alr.utils import range_progress_bar, progress_bar
+from alr.utils._type_aliases import _DeviceType
 
 __version__ = '0.0.0b8'
 

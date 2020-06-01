@@ -7,7 +7,7 @@ import torch
 import torch.distributions as dist
 import torch.utils.data as torchdata
 
-from alr.utils import _DeviceType
+from alr.utils._type_aliases import _DeviceType
 
 _BayesianCallable = Callable[[torch.Tensor], torch.Tensor]
 
@@ -104,15 +104,17 @@ class BALD(AcquisitionFunction):
             X_pool = torchdata.Subset(X_pool, idxs)
         dl = torchdata.DataLoader(X_pool, **self._dl_params)
         with torch.no_grad():
-            mc_preds = torch.cat(
+            mc_preds: torch.Tensor = torch.cat(
                 [self._pred_fn(x.to(self._device) if self._device else x) for x in dl],
                 dim=1
             )
+            mc_preds = mc_preds.double()
             assert mc_preds.size()[1] == pool_size
             mean_mc_preds = mc_preds.mean(dim=0)
-            H = -(mean_mc_preds * torch.log2(mean_mc_preds)).sum(dim=1)
-            E = (mc_preds * torch.log2(mc_preds)).sum(dim=2).mean(dim=0)
+            H = -(mean_mc_preds * torch.log(mean_mc_preds + 1e-5)).sum(dim=1)
+            E = (mc_preds * torch.log(mc_preds + 1e-5)).sum(dim=2).mean(dim=0)
             I = (H + E).cpu()
+            assert torch.isfinite(I).all()
             assert I.shape == (pool_size,)
             result = torch.argsort(I, descending=True).numpy()[:b]
             return idxs[result]

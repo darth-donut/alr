@@ -4,12 +4,14 @@ import torch
 import torch.utils.data as torchdata
 
 from alr.acquisition import AcquisitionFunction
+from contextlib import contextmanager
 
 
 class UnlabelledDataset(torchdata.Dataset):
     def __init__(self,
                  dataset: torchdata.Dataset,
-                 label_fn: Optional[Callable[[torchdata.Dataset], torchdata.Dataset]] = None):
+                 label_fn: Optional[Callable[[torchdata.Dataset], torchdata.Dataset]] = None,
+                 debug: Optional[bool] = False):
         r"""
         A wrapper class to manage the unlabelled `dataset` by providing a simple
         interface to :meth:`label` specific points and remove from the underlying dataset.
@@ -25,12 +27,18 @@ class UnlabelledDataset(torchdata.Dataset):
                 takes an unlabelled dataset and returns another
                 dataset that's fully labelled. If this is not provided, then `dataset` should
                 be labelled.
+            debug (bool, optional): Turn debug mode on. If `True`, then indexing this dataset
+                will return both `(x, y)` instead of just `x`; this is useful for research purposes.
+                Note, `label_fn` must be `None` otherwise an error will be raised.
         """
         self._dataset = dataset
         self._label_fn = label_fn
         self._mask = torch.ones(len(dataset), dtype=torch.bool)
         self._len = len(dataset)
         self._idx_mask = torch.arange(len(dataset))
+        self.debug = debug
+        if self.debug:
+            assert self._label_fn is None
 
     def label(self, idxs: Sequence[int]) -> torchdata.Dataset:
         r"""
@@ -65,8 +73,8 @@ class UnlabelledDataset(torchdata.Dataset):
 
     def __getitem__(self, idx) -> torch.Tensor:
         # indices of data where it hasn't been labelled yet
-        if self._label_fn:
-            # user provided x only
+        if self._label_fn or self.debug:
+            # user provided x only or debug mode is on, return (x, y)
             return self._dataset[self._idx_mask[idx].item()]
         # user provided (x, y) => return x only
         return self._dataset[self._idx_mask[idx].item()][0]
@@ -84,6 +92,23 @@ class UnlabelledDataset(torchdata.Dataset):
         """
         return torch.nonzero(~self._mask).flatten()
 
+    @property
+    def labelled_classes(self) -> list:
+        r"""
+        Return a list of classes that were labelled by the user (`label_fn`).
+
+        Returns:
+            list: list of classes
+        """
+        if self._label_fn is not None:
+            import warnings
+            # xxx: because it's 2 am and i'm lazy. (note to self: could save these targets in .label() fn)
+            warnings.warn("UnlabelledDataset was initialised with label_fn but labelled_classes was invoked.")
+        classes = []
+        for i in self.labelled_indices.tolist():
+            classes.append(self._dataset[i][1])
+        return classes
+
     def reset(self) -> None:
         r"""
         Reset to initial state -- all labelled points are unlabelled and
@@ -95,6 +120,18 @@ class UnlabelledDataset(torchdata.Dataset):
         self._mask = torch.ones(len(self._dataset), dtype=torch.bool)
         self._idx_mask = torch.arange(len(self._dataset))
         self._len = len(self._dataset)
+
+    @contextmanager
+    def tmp_debug(self):
+        r"""
+        Temporarily sets `debug` to `True`. Useful for debugging/evaluation purposes.
+
+        Returns:
+            :class:`UnlabelledDataset`: `self`
+        """
+        self.debug = True
+        yield self
+        self.debug = False
 
 
 class DataManager:
@@ -138,10 +175,7 @@ class DataManager:
         idxs = self._a_fn(self._unlabelled, b)
         assert idxs.shape == (b,)
         labelled = self._unlabelled.label(idxs)
-        # TODO(optim): is there a better way to do this?
-        self._labelled = torchdata.ConcatDataset(
-            (self._labelled, labelled)
-        )
+        self.append_to_labelled(labelled)
 
     @property
     def n_labelled(self) -> int:
@@ -193,3 +227,64 @@ class DataManager:
         """
         self._unlabelled.reset()
         self._labelled = self._old_labelled
+
+    def append_to_labelled(self, dataset: torchdata.Dataset):
+        r"""
+        Logically appends given dataset to the labelled dataset. Again, this does not
+        physically modify the provided dataset.
+
+        Args:
+            dataset (torch.utils.data.Dataset): dataset object
+
+        Returns:
+            NoneType: None
+        """
+        # TODO(optim): is there a better way to do this?
+        self._labelled = torchdata.ConcatDataset(
+            (self._labelled, dataset)
+        )
+
+
+class PseudoLabelDataset(torchdata.Dataset):
+    def __init__(self, dataset: torchdata.Dataset, pseudo_labels: Sequence):
+        r"""
+        Provides dataset with pseudo-labels. Dataset's `__getitem__` is expected to
+        return x only (i.e. without targets). Use :class:`RelabelDataset` if
+        dataset is labelled.
+
+        Args:
+            dataset (torch.utils.data.Dataset): dataset object
+            pseudo_labels (Sequence): pseudo-labels
+        """
+        assert len(pseudo_labels) == len(dataset)
+        self._dataset = dataset
+        self._labels = pseudo_labels
+
+    def __len__(self):
+        return len(self._dataset)
+
+    def __getitem__(self, idx):
+        return self._dataset[idx], self._labels[idx]
+
+
+class RelabelDataset(torchdata.Dataset):
+    def __init__(self, dataset: torchdata.Dataset, labels: Sequence):
+        r"""
+        Overrides dataset labels. Dataset's `__getitem__` is expected to
+        return (x, y) (i.e. with targets). Use :class:`PseudoLabelDataset` if
+        dataset in unlabelled.
+
+        Args:
+            dataset (torch.utils.data.Dataset): dataset object
+            labels (Sequence): new labels
+        """
+        assert len(labels) == len(dataset)
+        self._dataset = dataset
+        self._labels = labels
+
+    def __len__(self):
+        return len(self._dataset)
+
+    def __getitem__(self, idx):
+        return self._dataset[idx][0], self._labels[idx]
+

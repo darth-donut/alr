@@ -3,7 +3,8 @@ import torch
 import torch.utils.data as torchdata
 import itertools
 
-from alr.data import DataManager, UnlabelledDataset
+from alr.data import DataManager, UnlabelledDataset, RelabelDataset, PseudoLabelDataset
+from alr.data.datasets import Dataset
 from alr.acquisition import AcquisitionFunction
 
 
@@ -216,3 +217,46 @@ def test_data_manager():
     assert dm.n_unlabelled == N_UNLABELLED
     assert dm.labelled is train_pool
     assert dm.unlabelled is pool
+
+
+def test_relabel_dataset():
+    _, test = Dataset.MNIST.get()
+    fake_classes = np.random.randint(0, 100, size=len(test))
+    relabelled = RelabelDataset(test, fake_classes)
+    bs = 1024
+    loader = torchdata.DataLoader(relabelled, batch_size=bs, shuffle=False)
+    assert all([np.equal(fake_classes[idx * bs: (idx + 1) * bs], y).all() for idx, (_, y) in enumerate(loader)])
+    loader = torchdata.DataLoader(relabelled, batch_size=1, shuffle=False)
+    x, y = next(iter(loader))
+    assert x[0].shape == test[0][0].shape
+    assert np.equal(x[0], test[0][0]).all()
+
+
+def test_pseudolabel_dataset():
+    _, test = Dataset.MNIST.get()
+    fake_classes = np.random.randint(0, 100, size=len(test))
+    pseudo_labelled = PseudoLabelDataset(
+        UnlabelledDataset(test),
+        fake_classes,
+    )
+    bs = 1024
+    loader = torchdata.DataLoader(pseudo_labelled, batch_size=bs, shuffle=False)
+    assert all([np.equal(fake_classes[idx * bs: (idx + 1) * bs], y).all() for idx, (_, y) in enumerate(loader)])
+    loader = torchdata.DataLoader(pseudo_labelled, batch_size=1, shuffle=False)
+    x, y = next(iter(loader))
+    assert x[0].shape == test[0][0].shape
+    assert np.equal(x[0], test[0][0]).all()
+
+
+def test_unlabelled_data_debug():
+    train, test = Dataset.MNIST.get()
+    test = UnlabelledDataset(test, debug=False)
+    assert not test.debug
+    assert len(test[0]) == 1
+
+    with test.tmp_debug():
+        assert test.debug
+        assert isinstance(test[0], tuple)
+        assert len(test[0]) == 2
+    assert not test.debug
+    assert len(test[0]) == 1

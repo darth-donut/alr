@@ -3,10 +3,11 @@ import numpy as np
 import os
 import random
 
-from typing import Optional
+from typing import Optional, Sequence
 
 from alr.utils.time_utils import Elapsed, timeop, time_this, Time
-from alr.utils.experiment_helpers import stratified_partition, eval_fwd, eval_fwd_exp, _DeviceType
+from alr.utils.experiment_helpers import stratified_partition, eval_fwd, eval_fwd_exp
+from alr.utils._type_aliases import _DeviceType
 from alr.utils.progress_bar import progress_bar, range_progress_bar
 
 
@@ -18,7 +19,7 @@ __all__ = [
 ]
 
 
-def manual_seed(seed: Optional[int] = 42, det_cudnn: Optional[bool] = True) -> int:
+def manual_seed(seed: Optional[int] = 42, det_cudnn: Optional[bool] = False) -> int:
     r"""
     To ensure reproducibility, set the seeds and make cuDNN deterministic.
 
@@ -44,3 +45,9 @@ def manual_seed(seed: Optional[int] = 42, det_cudnn: Optional[bool] = True) -> i
     # env
     os.environ['PYTHONHASHSEED'] = str(seed)
     return seed
+
+
+def _map_device(xs: Sequence[torch.Tensor], device: _DeviceType):
+    if device is not None:
+        return [x.to(device) for x in xs]
+    return xs
