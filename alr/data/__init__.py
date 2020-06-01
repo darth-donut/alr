@@ -92,6 +92,23 @@ class UnlabelledDataset(torchdata.Dataset):
         """
         return torch.nonzero(~self._mask).flatten()
 
+    @property
+    def labelled_classes(self) -> list:
+        r"""
+        Return a list of classes that were labelled by the user (`label_fn`).
+
+        Returns:
+            list: list of classes
+        """
+        if self._label_fn is not None:
+            import warnings
+            # xxx: because it's 2 am and i'm lazy. (note to self: could save these targets in .label() fn)
+            warnings.warn("UnlabelledDataset was initialised with label_fn but labelled_classes was invoked.")
+        classes = []
+        for i in self.labelled_indices.tolist():
+            classes.append(self._dataset[i][1])
+        return classes
+
     def reset(self) -> None:
         r"""
         Reset to initial state -- all labelled points are unlabelled and
