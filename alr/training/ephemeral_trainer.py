@@ -199,7 +199,7 @@ class EphemeralTrainer:
                  loss: _Loss_fn, optimiser: str,
                  threshold: float,
                  random_fixed_length_sampler_length: Optional[int] = None,
-                 root: Optional[str] = None,
+                 log_dir: Optional[str] = None,
                  patience: Optional[int] = None,
                  reload_best: Optional[bool] = False,
                  device: _DeviceType = None,
@@ -215,7 +215,7 @@ class EphemeralTrainer:
         self._args = args
         self._kwargs = kwargs
         self._threshold = threshold
-        self._root = root
+        self._log_dir = log_dir
         self._pool_loader_kwargs = pool_loader_kwargs
         self._rfls_len = random_fixed_length_sampler_length
 
@@ -258,7 +258,7 @@ class EphemeralTrainer:
 
         pseudo_label_manager = PseudoLabelManager(
             pool=self._pool, model=self._model,
-            threshold=self._threshold, log_dir=self._root,
+            threshold=self._threshold, log_dir=self._log_dir,
             device=self._device, **self._pool_loader_kwargs
         )
         trainer = create_pseudo_label_trainer(
