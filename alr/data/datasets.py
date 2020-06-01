@@ -250,9 +250,9 @@ class CIFAR10Net(nn.Module):
         self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
         self.conv4 = nn.Conv2d(64, 64, 3)
         self.drop2 = nn.Dropout()
-        # 14x14
+        # 13x13
         # max pool => 7x7
-        self.fc1 = nn.Linear(7 * 7 * 64, 512)
+        self.fc1 = nn.Linear(6 * 6 * 64, 512)
         self.fc2 = nn.Linear(512, 10)
         self.drop3 = nn.Dropout()
 
@@ -263,7 +263,7 @@ class CIFAR10Net(nn.Module):
         x = F.relu(self.conv4(F.relu(self.conv3(x))))
         x = self.drop2(F.max_pool2d(x, 2))
 
-        x = x.view(-1, 7 * 7 * 64)
+        x = x.view(-1, 6 * 6 * 64)
         x = self.drop3(F.relu(self.fc1(x)))
 
         x = self.fc2(x)
