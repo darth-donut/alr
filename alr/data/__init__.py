@@ -4,6 +4,7 @@ import torch
 import torch.utils.data as torchdata
 
 from alr.acquisition import AcquisitionFunction
+from contextlib import contextmanager
 
 
 class UnlabelledDataset(torchdata.Dataset):
@@ -102,6 +103,18 @@ class UnlabelledDataset(torchdata.Dataset):
         self._mask = torch.ones(len(self._dataset), dtype=torch.bool)
         self._idx_mask = torch.arange(len(self._dataset))
         self._len = len(self._dataset)
+
+    @contextmanager
+    def tmp_debug(self):
+        r"""
+        Temporarily sets `debug` to `True`. Useful for debugging/evaluation purposes.
+
+        Returns:
+            :class:`UnlabelledDataset`: `self`
+        """
+        self.debug = True
+        yield self
+        self.debug = False
 
 
 class DataManager:

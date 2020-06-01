@@ -246,3 +246,17 @@ def test_pseudolabel_dataset():
     x, y = next(iter(loader))
     assert x[0].shape == test[0][0].shape
     assert np.equal(x[0], test[0][0]).all()
+
+
+def test_unlabelled_data_debug():
+    train, test = Dataset.MNIST.get()
+    test = UnlabelledDataset(test, debug=False)
+    assert not test.debug
+    assert len(test[0]) == 1
+
+    with test.tmp_debug():
+        assert test.debug
+        assert isinstance(test[0], tuple)
+        assert len(test[0]) == 2
+    assert not test.debug
+    assert len(test[0]) == 1
