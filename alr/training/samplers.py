@@ -103,6 +103,4 @@ class MinLabelledSampler(torchdata.BatchSampler):
         for i in range(len(self)):
             r1 = labelled_indices[i * self._min_labelled: (i + 1) * self._min_labelled]
             r2 = unlabelled_indices[i * num_unlabelled: (i + 1) * num_unlabelled] + len(self._labelled)
-            res = np.r_[r1, r2]
-            assert len(res) == self._batch_size
-            yield res
+            yield np.r_[r1, r2]

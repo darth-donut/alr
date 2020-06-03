@@ -105,11 +105,11 @@ def test_random_fixed_length_sampler_short_shuffle():
 
 
 def test_min_labelled_sampler():
-    labelled = OddData(5)
-    unlabelled = EvenData(10230)
-    min_labelled = 7
+    labelled = OddData(20)
+    unlabelled = EvenData(1230)
+    min_labelled = 32
     mls = MinLabelledSampler(
-        labelled, unlabelled, batch_size=10, min_labelled=min_labelled
+        labelled, unlabelled, batch_size=64, min_labelled=.5
     )
     c = Counter()
     for i in mls:
