@@ -154,7 +154,10 @@ def create_pseudo_label_trainer(model: ALRModel, loss: _Loss_fn, optimiser: str,
                                 pseudo_label_manager: PseudoLabelManager,
                                 min_labelled: Optional[Union[float, int]] = .4,
                                 patience: Optional[int] = None, reload_best: Optional[bool] = None,
-                                epochs: Optional[int] = 1, device: _DeviceType = None,
+                                epochs: Optional[int] = 1,
+                                lr_scheduler: Optional[str] = None,
+                                lr_scheduler_kwargs: Optional[dict] = {},
+                                device: _DeviceType = None,
                                 *args, **kwargs):
     def _step(engine: Engine, _):
         # always reset weights
@@ -167,7 +170,10 @@ def create_pseudo_label_trainer(model: ALRModel, loss: _Loss_fn, optimiser: str,
             # update dataloader's dataset attribute
             new_loader = _update_dataloader(train_loader, pld, min_labelled)
         # begin supervised training
-        trainer = Trainer(model, loss, optimiser, patience, reload_best, device=device, *args, **kwargs)
+        trainer = Trainer(model, loss, optimiser, patience, reload_best,
+                          lr_scheduler=lr_scheduler,
+                          lr_scheduler_kwargs=lr_scheduler_kwargs,
+                          device=device, *args, **kwargs)
         history = trainer.fit(
             new_loader, val_loader=val_loader,
             epochs=epochs,
@@ -193,6 +199,8 @@ class EphemeralTrainer:
                  log_dir: Optional[str] = None,
                  patience: Optional[int] = None,
                  reload_best: Optional[bool] = False,
+                 lr_scheduler: Optional[str] = None,
+                 lr_scheduler_kwargs: Optional[dict] = {},
                  device: _DeviceType = None,
                  pool_loader_kwargs: Optional[dict] = {},
                  *args, **kwargs):
@@ -209,6 +217,8 @@ class EphemeralTrainer:
         self._log_dir = log_dir
         self._pool_loader_kwargs = pool_loader_kwargs
         self._min_labelled = min_labelled
+        self._lr_scheduler = lr_scheduler
+        self._lr_scheduler_kwargs = lr_scheduler_kwargs
 
     def fit(self,
             train_loader: torchdata.DataLoader,
@@ -258,7 +268,10 @@ class EphemeralTrainer:
             train_loader=train_loader, val_loader=val_loader,
             pseudo_label_manager=pseudo_label_manager, min_labelled=self._min_labelled,
             patience=self._patience, reload_best=self._reload_best,
-            epochs=epochs, device=self._device, *self._args, **self._kwargs,
+            epochs=epochs,
+            lr_scheduler=self._lr_scheduler,
+            lr_scheduler_kwargs=self._lr_scheduler_kwargs,
+            device=self._device, *self._args, **self._kwargs,
         )
         # output of trainer are running averages of train_loss and train_acc (from the
         # last epoch of the supervised trainer)
