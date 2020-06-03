@@ -90,6 +90,8 @@ class MinLabelledSampler(torchdata.BatchSampler):
         self._batch_size = batch_size
         self._min_labelled = min_labelled
         self._unlabelled_batch_size = batch_size - min_labelled
+        # because ignite 0.3.0 :(
+        self.sampler = None
 
     def __len__(self):
         return round(len(self._pseudo_labelled) / self._unlabelled_batch_size + .5)
