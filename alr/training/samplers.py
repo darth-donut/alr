@@ -63,7 +63,7 @@ class RandomFixedLengthSampler(torchdata.Sampler):
         return max(self._length, len(self._dataset))
 
 
-class MinLabelledSampler(torchdata.Sampler):
+class MinLabelledSampler(torchdata.BatchSampler):
     def __init__(self,
                  labelled: torchdata.Dataset,
                  pseudo_labelled: torchdata.Dataset,
