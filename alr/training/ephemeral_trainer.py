@@ -4,7 +4,7 @@ from alr import ALRModel
 from alr.data import RelabelDataset, PseudoLabelDataset, UnlabelledDataset
 from alr.training.utils import EarlyStopper, PLPredictionSaver
 from alr.utils._type_aliases import _DeviceType, _Loss_fn
-from typing import Optional, Callable
+from typing import Optional, Callable, Union
 
 import numpy as np
 import torch
@@ -14,7 +14,7 @@ from ignite.engine import create_supervised_evaluator, Events, Engine
 from ignite.metrics import Accuracy, Loss
 from ignite.contrib.handlers import ProgressBar
 from alr.training import Trainer
-from alr.training.samplers import RandomFixedLengthSampler
+from alr.training.samplers import MinLabelledSampler
 
 
 class PseudoLabelManager:
@@ -135,27 +135,29 @@ class PseudoLabelCollector:
 
 
 def _update_dataloader(loader: torchdata.DataLoader,
-                       dataset: torchdata.Dataset,
-                       sampler: Optional[torchdata.Sampler] = None):
+                       pseudo_labelled_dataset: torchdata.Dataset,
+                       min_labelled: Union[float, int]):
+    labelled_dataset = loader.dataset
     # attributes that usually go in dataloader's constructor
     attrs = [k for k in loader.__dict__.keys() if not k.startswith('_')]
-    drop = ['dataset', 'sampler', 'batch_sampler', 'dataset_kind']
+    drop = ['dataset', 'sampler', 'batch_sampler', 'dataset_kind', 'batch_size', 'shuffle', 'drop_last']
     kwargs = {k: getattr(loader, k) for k in attrs if k not in drop}
-    if not isinstance(loader.sampler, (torchdata.SequentialSampler, torchdata.RandomSampler, RandomFixedLengthSampler)):
-        raise ValueError(f"Only sequential, random, and random fixed length samplers "
-                         f"are supported in _update_dataloader")
-    kwargs['dataset'] = dataset
-    # Sequential and Random will be automatically determined if sampler is None (depending on shuffle)
-    kwargs['sampler'] = sampler
+    kwargs['dataset'] = torchdata.ConcatDataset((labelled_dataset, pseudo_labelled_dataset))
+    kwargs['batch_sampler'] = MinLabelledSampler(
+        labelled_dataset, pseudo_labelled_dataset, loader.batch_size, min_labelled=min_labelled,
+    )
     return torchdata.DataLoader(**kwargs)
 
 
 def create_pseudo_label_trainer(model: ALRModel, loss: _Loss_fn, optimiser: str,
                                 train_loader: torchdata.DataLoader, val_loader: torchdata.DataLoader,
                                 pseudo_label_manager: PseudoLabelManager,
-                                rfls_len: Optional[int] = None,
+                                min_labelled: Optional[Union[float, int]] = .4,
                                 patience: Optional[int] = None, reload_best: Optional[bool] = None,
-                                epochs: Optional[int] = 1, device: _DeviceType = None,
+                                epochs: Optional[int] = 1,
+                                lr_scheduler: Optional[str] = None,
+                                lr_scheduler_kwargs: Optional[dict] = {},
+                                device: _DeviceType = None,
                                 *args, **kwargs):
     def _step(engine: Engine, _):
         # always reset weights
@@ -165,18 +167,13 @@ def create_pseudo_label_trainer(model: ALRModel, loss: _Loss_fn, optimiser: str,
         new_loader = train_loader
         pld = engine.state.pseudo_labelled_dataset
         if pld is not None:
-            train_ds = torchdata.ConcatDataset((train_loader.dataset, pld))
             # update dataloader's dataset attribute
-            if rfls_len:
-                new_loader = _update_dataloader(
-                    train_loader, train_ds,
-                    RandomFixedLengthSampler(train_ds, length=rfls_len, shuffle=True)
-                )
-            else:
-                new_loader = _update_dataloader(train_loader, train_ds)
-
+            new_loader = _update_dataloader(train_loader, pld, min_labelled)
         # begin supervised training
-        trainer = Trainer(model, loss, optimiser, patience, reload_best, device=device, *args, **kwargs)
+        trainer = Trainer(model, loss, optimiser, patience, reload_best,
+                          lr_scheduler=lr_scheduler,
+                          lr_scheduler_kwargs=lr_scheduler_kwargs,
+                          device=device, *args, **kwargs)
         history = trainer.fit(
             new_loader, val_loader=val_loader,
             epochs=epochs,
@@ -198,10 +195,12 @@ class EphemeralTrainer:
                  pool: UnlabelledDataset,
                  loss: _Loss_fn, optimiser: str,
                  threshold: float,
-                 random_fixed_length_sampler_length: Optional[int] = None,
+                 min_labelled: Optional[Union[float, int]] = .4,
                  log_dir: Optional[str] = None,
                  patience: Optional[int] = None,
                  reload_best: Optional[bool] = False,
+                 lr_scheduler: Optional[str] = None,
+                 lr_scheduler_kwargs: Optional[dict] = {},
                  device: _DeviceType = None,
                  pool_loader_kwargs: Optional[dict] = {},
                  *args, **kwargs):
@@ -217,9 +216,12 @@ class EphemeralTrainer:
         self._threshold = threshold
         self._log_dir = log_dir
         self._pool_loader_kwargs = pool_loader_kwargs
-        self._rfls_len = random_fixed_length_sampler_length
+        self._min_labelled = min_labelled
+        self._lr_scheduler = lr_scheduler
+        self._lr_scheduler_kwargs = lr_scheduler_kwargs
 
-    def fit(self, train_loader: torchdata.DataLoader,
+    def fit(self,
+            train_loader: torchdata.DataLoader,
             val_loader: Optional[torchdata.DataLoader] = None,
             iterations: Optional[int] = 1,
             epochs: Optional[int] = 1):
@@ -264,9 +266,12 @@ class EphemeralTrainer:
         trainer = create_pseudo_label_trainer(
             model=self._model, loss=self._loss, optimiser=self._optimiser,
             train_loader=train_loader, val_loader=val_loader,
-            pseudo_label_manager=pseudo_label_manager, rfls_len=self._rfls_len,
+            pseudo_label_manager=pseudo_label_manager, min_labelled=self._min_labelled,
             patience=self._patience, reload_best=self._reload_best,
-            epochs=epochs, device=self._device, *self._args, **self._kwargs,
+            epochs=epochs,
+            lr_scheduler=self._lr_scheduler,
+            lr_scheduler_kwargs=self._lr_scheduler_kwargs,
+            device=self._device, *self._args, **self._kwargs,
         )
         # output of trainer are running averages of train_loss and train_acc (from the
         # last epoch of the supervised trainer)

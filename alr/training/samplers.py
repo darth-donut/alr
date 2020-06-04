@@ -3,7 +3,7 @@ Useful samplers when training with small datasets
 """
 import torch.utils.data as torchdata
 import numpy as np
-from typing import Optional
+from typing import Optional, Union
 from itertools import chain
 
 
@@ -61,3 +61,46 @@ class RandomFixedLengthSampler(torchdata.Sampler):
 
     def __len__(self):
         return max(self._length, len(self._dataset))
+
+
+class MinLabelledSampler(torchdata.BatchSampler):
+    def __init__(self,
+                 labelled: torchdata.Dataset,
+                 pseudo_labelled: torchdata.Dataset,
+                 batch_size: int,
+                 min_labelled: Union[int, float]):
+        r"""
+        Given labelled and pseudo_labelled datasets, returns a batch sampler that always yields
+        exactly `min_labelled` points from the `labelled` dataset. If there is not enough
+        points from `labelled`, then the points are recycled. Note that all the data points
+        are shuffled. Note, the concatenated dataset is assumed to have labelled followed by
+        pseudo_labelled, i.e. `torch.utils.data.ConcatDataset((labelled, pseudo_labelled))`.
+
+        Args:
+            labelled (torch.utils.data.Dataset): labelled dataset
+            pseudo_labelled (torch.utils.data.Dataset): pseudo_labelled dataset
+            batch_size (int): batch size
+            min_labelled (int, float): min number of points that comes from `labelled`. Must be smaller
+                than `batch_size`. If `float` is provided, then this argument is treated as a proportion.
+        """
+        min_labelled = min_labelled if type(min_labelled) == int else round(min_labelled * batch_size + .5)
+        assert batch_size > min_labelled
+        self._labelled = labelled
+        self._pseudo_labelled = pseudo_labelled
+        self._batch_size = batch_size
+        self._min_labelled = min_labelled
+        self._unlabelled_batch_size = batch_size - min_labelled
+        # because ignite 0.3.0 :(
+        self.sampler = None
+
+    def __len__(self):
+        return round(len(self._pseudo_labelled) / self._unlabelled_batch_size + .5)
+
+    def __iter__(self):
+        num_unlabelled = self._batch_size - self._min_labelled
+        labelled_indices = np.random.permutation(len(self) * self._min_labelled) % len(self._labelled)
+        unlabelled_indices = np.random.permutation(len(self._pseudo_labelled))
+        for i in range(len(self)):
+            r1 = labelled_indices[i * self._min_labelled: (i + 1) * self._min_labelled]
+            r2 = unlabelled_indices[i * num_unlabelled: (i + 1) * num_unlabelled] + len(self._labelled)
+            yield np.r_[r1, r2]

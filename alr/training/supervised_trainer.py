@@ -5,6 +5,7 @@ from ignite.engine import Engine, Events, \
 from ignite.metrics import Loss, Accuracy, RunningAverage
 import torch.utils.data as torchdata
 from ignite.contrib.handlers import ProgressBar
+from ignite.contrib.handlers.param_scheduler import LRScheduler
 import numpy as np
 
 from collections import defaultdict
@@ -21,6 +22,8 @@ class Trainer:
                  optimiser: str,
                  patience: Optional[int] = None,
                  reload_best: Optional[bool] = False,
+                 lr_scheduler: Optional[str] = None,
+                 lr_scheduler_kwargs: Optional[dict] = {},
                  device: _DeviceType = None,
                  *args,
                  **kwargs):
@@ -47,6 +50,11 @@ class Trainer:
         assert not reload_best or patience is not None
         self._device = device
         self._model = model
+        self._lr_scheduler = lr_scheduler
+        if lr_scheduler is not None:
+            self._lr_scheduler = getattr(
+                torch.optim.lr_scheduler, lr_scheduler
+            )(self._optim, **lr_scheduler_kwargs)
 
     def fit(self,
             train_loader: torchdata.DataLoader,
@@ -93,6 +101,9 @@ class Trainer:
             output_transform=lambda x, y, y_pred, loss: (loss.item(), y_pred, y),
         )
         pbar.attach(trainer, metric_names='all')
+        if self._lr_scheduler is not None:
+            scheduler = LRScheduler(self._lr_scheduler)
+            trainer.add_event_handler(Events.EPOCH_COMPLETED, scheduler)
         RunningAverage(Accuracy(output_transform=lambda x: (x[1], x[2]))).attach(trainer, 'train_acc')
         RunningAverage(output_transform=lambda x: x[0]).attach(trainer, 'train_loss')
 

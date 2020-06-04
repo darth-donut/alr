@@ -1,6 +1,8 @@
-from alr.training.samplers import RandomFixedLengthSampler
+from alr.training.samplers import RandomFixedLengthSampler, MinLabelledSampler
 import torch.utils.data as torchdata
 import torch
+from collections import Counter
+import numpy as np
 
 
 class Data(torchdata.Dataset):
@@ -14,6 +16,27 @@ class Data(torchdata.Dataset):
     def __len__(self):
         return self._n
 
+
+class OddData(torchdata.Dataset):
+    def __init__(self, n):
+        self._arr = list(range(1, n * 2 + 1, 2))
+
+    def __len__(self):
+        return len(self._arr)
+
+    def __getitem__(self, idx):
+        return self._arr[idx]
+
+
+class EvenData(torchdata.Dataset):
+    def __init__(self, n):
+        self._arr = list(range(0, n * 2, 2))
+
+    def __len__(self):
+        return len(self._arr)
+
+    def __getitem__(self, idx):
+        return self._arr[idx]
 
 def test_random_fixed_length_sampler_target_length():
     ds_len = 10
@@ -79,3 +102,22 @@ def test_random_fixed_length_sampler_short_shuffle():
     # some indices might happen to be the the same but it's nigh impossible to
     # get sequential indices
     assert not all(equals)
+
+
+def test_min_labelled_sampler():
+    labelled = OddData(20)
+    unlabelled = EvenData(1230)
+    min_labelled = 32
+    mls = MinLabelledSampler(
+        labelled, unlabelled, batch_size=64, min_labelled=.5
+    )
+    c = Counter()
+    for i in mls:
+        indices = np.array(i)
+        # there is exactly min_labelled in each batch
+        assert (indices < len(labelled)).sum() == min_labelled
+        c += Counter(i)
+
+    for i in range(len(labelled), len(unlabelled)):
+        # there is exactly one from unlabelled pool
+        assert c[i] == 1

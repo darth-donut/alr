@@ -129,9 +129,12 @@ class UnlabelledDataset(torchdata.Dataset):
         Returns:
             :class:`UnlabelledDataset`: `self`
         """
-        self.debug = True
-        yield self
-        self.debug = False
+        if self.debug:
+            yield self
+        else:
+            self.debug = True
+            yield self
+            self.debug = False
 
 
 class DataManager:

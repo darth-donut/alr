@@ -155,6 +155,9 @@ class Dataset(Enum):
         """
         if self in {Dataset.MNIST, Dataset.RepeatedMNIST}:
             return MNISTNet()
+        if self == Dataset.CIFAR10:
+            return CIFAR10Net()
+        raise NotImplementedError("No model defined for this dataset yet.")
 
 
 # 24 sets of 20 points with +- 0.01 accuracy from median: 0.65205
@@ -209,6 +212,7 @@ _mnist_20 = [
      21174, 57606, 22846, 54399)
 ]
 
+
 class MNISTNet(nn.Module):
     def __init__(self):
         super().__init__()
@@ -232,3 +236,36 @@ class MNISTNet(nn.Module):
         x = x.view(-1, 64 * 4 * 4)
         x = self.fc2(self.dropout3(F.relu(self.fc1(x))))
         return F.log_softmax(x, dim=1)
+
+
+class CIFAR10Net(nn.Module):
+    def __init__(self):
+        # architecture (almost) similar to https://keras.io/examples/cifar10_cnn/
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 32, 3, padding=1)
+        self.conv2 = nn.Conv2d(32, 32, 3)
+        self.drop1 = nn.Dropout()
+        # 30x30
+        # max pool => 15x15
+        self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
+        self.conv4 = nn.Conv2d(64, 64, 3)
+        self.drop2 = nn.Dropout()
+        # 13x13
+        # max pool => 7x7
+        self.fc1 = nn.Linear(6 * 6 * 64, 512)
+        self.fc2 = nn.Linear(512, 10)
+        self.drop3 = nn.Dropout()
+
+    def forward(self, x):
+        x = F.relu(self.conv2(F.relu(self.conv1(x))))
+        x = self.drop1(F.max_pool2d(x, 2))
+
+        x = F.relu(self.conv4(F.relu(self.conv3(x))))
+        x = self.drop2(F.max_pool2d(x, 2))
+
+        x = x.view(-1, 6 * 6 * 64)
+        x = self.drop3(F.relu(self.fc1(x)))
+
+        x = self.fc2(x)
+        return F.log_softmax(x, dim=-1)
+
