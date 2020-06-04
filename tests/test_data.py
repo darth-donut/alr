@@ -260,3 +260,14 @@ def test_unlabelled_data_debug():
         assert len(test[0]) == 2
     assert not test.debug
     assert len(test[0]) == 1
+
+
+def test_unlabelled_data_debug_nested():
+    train, test = Dataset.MNIST.get()
+    pool = UnlabelledDataset(test, debug=False)
+    with pool.tmp_debug():
+        assert pool.debug
+        with pool.tmp_debug():
+            assert pool.debug
+        assert pool.debug
+    assert not pool.debug
