@@ -22,6 +22,7 @@ class PseudoLabelManager:
                  pool: UnlabelledDataset,
                  model: nn.Module,
                  threshold: float,
+                 init_pseudo_labelled: Optional[torchdata.Dataset] = None,
                  log_dir: Optional[str] = None,
                  device: _DeviceType = None,
                  **kwargs):
@@ -35,6 +36,9 @@ class PseudoLabelManager:
         self._device = device
         self._threshold = threshold
         self.acquired_sizes = []
+        # keep a copy of the latest pseudo-labelled dataset
+        self._init_pld = init_pseudo_labelled
+        self.history = [init_pseudo_labelled]
 
     def attach(self, engine: Engine):
         engine.add_event_handler(Events.STARTED, self._initialise)
@@ -42,7 +46,9 @@ class PseudoLabelManager:
         engine.add_event_handler(Events.ITERATION_COMPLETED, self._load_labels)
 
     def _load_labels(self, engine: Engine):
-        evaluator = create_supervised_evaluator(self._model, metrics=None, device=self._device)
+        evaluator = create_supervised_evaluator(
+            self._model, metrics=None, device=self._device
+        )
         plc = PseudoLabelCollector(
             self._threshold, log_dir=self._log_dir,
         )
@@ -57,15 +63,16 @@ class PseudoLabelManager:
             confident_points = torchdata.Subset(self._pool, indices)
             if self._pool.debug:
                 # pool returns target labels too
-                engine.state.pseudo_labelled_dataset = RelabelDataset(confident_points, pseudo_labels)
+                pld = RelabelDataset(confident_points, pseudo_labels)
             else:
-                engine.state.pseudo_labelled_dataset = PseudoLabelDataset(confident_points, pseudo_labels)
+                pld = PseudoLabelDataset(confident_points, pseudo_labels)
         else:
-            engine.state.pseudo_labelled_dataset = None
+            pld = None
+        engine.state.pseudo_labelled_dataset = pld
+        self.history.append(pld)
 
-    @staticmethod
-    def _initialise(engine: Engine):
-        engine.state.pseudo_labelled_dataset = None
+    def _initialise(self, engine: Engine):
+        engine.state.pseudo_labelled_dataset = self._init_pld
 
 
 class PseudoLabelCollector:
@@ -201,6 +208,7 @@ class EphemeralTrainer:
                  reload_best: Optional[bool] = False,
                  lr_scheduler: Optional[str] = None,
                  lr_scheduler_kwargs: Optional[dict] = {},
+                 init_pseudo_label_dataset: Optional[torchdata.Dataset] = None,
                  device: _DeviceType = None,
                  pool_loader_kwargs: Optional[dict] = {},
                  *args, **kwargs):
@@ -219,6 +227,8 @@ class EphemeralTrainer:
         self._min_labelled = min_labelled
         self._lr_scheduler = lr_scheduler
         self._lr_scheduler_kwargs = lr_scheduler_kwargs
+        self._init_pseudo_label_dataset = init_pseudo_label_dataset
+        self._last_pseudo_label_dataset = None
 
     def fit(self,
             train_loader: torchdata.DataLoader,
@@ -260,7 +270,9 @@ class EphemeralTrainer:
 
         pseudo_label_manager = PseudoLabelManager(
             pool=self._pool, model=self._model,
-            threshold=self._threshold, log_dir=self._log_dir,
+            threshold=self._threshold,
+            init_pseudo_labelled=self._init_pseudo_label_dataset,
+            log_dir=self._log_dir,
             device=self._device, **self._pool_loader_kwargs
         )
         trainer = create_pseudo_label_trainer(
@@ -287,6 +299,10 @@ class EphemeralTrainer:
             es.reload_best()
 
         history['train_size'] = np.array(pseudo_label_manager.acquired_sizes) + len(train_loader.dataset)
+        if trainer.state.epoch == epochs:
+            self._last_pseudo_label_dataset = pseudo_label_manager.history[-2]
+        else:
+            self._last_pseudo_label_dataset = pseudo_label_manager.history[-(self._patience + 2)]
         return history
 
     def evaluate(self, data_loader: torchdata.DataLoader) -> dict:
