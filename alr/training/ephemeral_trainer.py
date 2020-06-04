@@ -15,6 +15,7 @@ from ignite.metrics import Accuracy, Loss
 from ignite.contrib.handlers import ProgressBar
 from alr.training import Trainer
 from alr.training.samplers import MinLabelledSampler, RandomFixedLengthSampler
+import copy
 
 
 class PseudoLabelManager:
@@ -60,7 +61,7 @@ class PseudoLabelManager:
             evaluator.state.pl_plabs.cpu().numpy()
         self.acquired_sizes.append(indices.shape[0])
         if indices.shape[0]:
-            confident_points = torchdata.Subset(self._pool, indices)
+            confident_points = torchdata.Subset(copy.copy(self._pool), indices)
             if self._pool.debug:
                 # pool returns target labels too
                 pld = RelabelDataset(confident_points, pseudo_labels)
