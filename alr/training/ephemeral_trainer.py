@@ -14,7 +14,8 @@ from ignite.engine import create_supervised_evaluator, Events, Engine
 from ignite.metrics import Accuracy, Loss
 from ignite.contrib.handlers import ProgressBar
 from alr.training import Trainer
-from alr.training.samplers import MinLabelledSampler
+from alr.training.samplers import MinLabelledSampler, RandomFixedLengthSampler
+import copy
 
 
 class PseudoLabelManager:
@@ -22,6 +23,7 @@ class PseudoLabelManager:
                  pool: UnlabelledDataset,
                  model: nn.Module,
                  threshold: float,
+                 init_pseudo_labelled: Optional[torchdata.Dataset] = None,
                  log_dir: Optional[str] = None,
                  device: _DeviceType = None,
                  **kwargs):
@@ -35,6 +37,9 @@ class PseudoLabelManager:
         self._device = device
         self._threshold = threshold
         self.acquired_sizes = []
+        # keep a copy of the latest pseudo-labelled dataset
+        self._init_pld = init_pseudo_labelled
+        self.history = [init_pseudo_labelled]
 
     def attach(self, engine: Engine):
         engine.add_event_handler(Events.STARTED, self._initialise)
@@ -42,7 +47,9 @@ class PseudoLabelManager:
         engine.add_event_handler(Events.ITERATION_COMPLETED, self._load_labels)
 
     def _load_labels(self, engine: Engine):
-        evaluator = create_supervised_evaluator(self._model, metrics=None, device=self._device)
+        evaluator = create_supervised_evaluator(
+            self._model, metrics=None, device=self._device
+        )
         plc = PseudoLabelCollector(
             self._threshold, log_dir=self._log_dir,
         )
@@ -54,18 +61,19 @@ class PseudoLabelManager:
             evaluator.state.pl_plabs.cpu().numpy()
         self.acquired_sizes.append(indices.shape[0])
         if indices.shape[0]:
-            confident_points = torchdata.Subset(self._pool, indices)
+            confident_points = torchdata.Subset(copy.copy(self._pool), indices)
             if self._pool.debug:
                 # pool returns target labels too
-                engine.state.pseudo_labelled_dataset = RelabelDataset(confident_points, pseudo_labels)
+                pld = RelabelDataset(confident_points, pseudo_labels)
             else:
-                engine.state.pseudo_labelled_dataset = PseudoLabelDataset(confident_points, pseudo_labels)
+                pld = PseudoLabelDataset(confident_points, pseudo_labels)
         else:
-            engine.state.pseudo_labelled_dataset = None
+            pld = None
+        engine.state.pseudo_labelled_dataset = pld
+        self.history.append(pld)
 
-    @staticmethod
-    def _initialise(engine: Engine):
-        engine.state.pseudo_labelled_dataset = None
+    def _initialise(self, engine: Engine):
+        engine.state.pseudo_labelled_dataset = self._init_pld
 
 
 class PseudoLabelCollector:
@@ -134,9 +142,9 @@ class PseudoLabelCollector:
             self._saver.global_step_from_engine(engine)
 
 
-def _update_dataloader(loader: torchdata.DataLoader,
-                       pseudo_labelled_dataset: torchdata.Dataset,
-                       min_labelled: Union[float, int]):
+def _update_dataloader_batch_sampler(loader: torchdata.DataLoader,
+                                     pseudo_labelled_dataset: torchdata.Dataset,
+                                     min_labelled: Union[float, int]):
     labelled_dataset = loader.dataset
     # attributes that usually go in dataloader's constructor
     attrs = [k for k in loader.__dict__.keys() if not k.startswith('_')]
@@ -149,26 +157,52 @@ def _update_dataloader(loader: torchdata.DataLoader,
     return torchdata.DataLoader(**kwargs)
 
 
+def _update_dataloader(loader: torchdata.DataLoader,
+                       dataset: torchdata.Dataset,
+                       sampler: Optional[torchdata.Sampler] = None):
+    # attributes that usually go in dataloader's constructor
+    attrs = [k for k in loader.__dict__.keys() if not k.startswith('_')]
+    drop = ['dataset', 'sampler', 'batch_sampler', 'dataset_kind']
+    kwargs = {k: getattr(loader, k) for k in attrs if k not in drop}
+    if not isinstance(loader.sampler, (torchdata.SequentialSampler, torchdata.RandomSampler, RandomFixedLengthSampler)):
+        raise ValueError(f"Only sequential, random, and random fixed length samplers "
+                         f"are supported in _update_dataloader")
+    kwargs['dataset'] = dataset
+    # Sequential and Random will be automatically determined if sampler is None (depending on shuffle)
+    kwargs['sampler'] = sampler
+    return torchdata.DataLoader(**kwargs)
+
+
 def create_pseudo_label_trainer(model: ALRModel, loss: _Loss_fn, optimiser: str,
                                 train_loader: torchdata.DataLoader, val_loader: torchdata.DataLoader,
                                 pseudo_label_manager: PseudoLabelManager,
-                                min_labelled: Optional[Union[float, int]] = .4,
+                                rfls_len: Optional[int] = None,
+                                min_labelled: Optional[Union[float, int]] = None,
                                 patience: Optional[int] = None, reload_best: Optional[bool] = None,
                                 epochs: Optional[int] = 1,
                                 lr_scheduler: Optional[str] = None,
                                 lr_scheduler_kwargs: Optional[dict] = {},
                                 device: _DeviceType = None,
                                 *args, **kwargs):
-    def _step(engine: Engine, _):
-        # always reset weights
-        model.reset_weights()
+    assert not min_labelled or not rfls_len, "rfls_len and min_labelled are mutually exclusive"
 
+    def _step(engine: Engine, _):
+        model.reset_weights()
         # update loader accordingly: if pld is not none, concatenate them
         new_loader = train_loader
         pld = engine.state.pseudo_labelled_dataset
         if pld is not None:
+            train_ds = torchdata.ConcatDataset((train_loader.dataset, pld))
             # update dataloader's dataset attribute
-            new_loader = _update_dataloader(train_loader, pld, min_labelled)
+            if rfls_len:
+                new_loader = _update_dataloader(
+                    train_loader, train_ds,
+                    RandomFixedLengthSampler(train_ds, length=rfls_len, shuffle=True)
+                )
+            elif min_labelled:
+                new_loader = _update_dataloader_batch_sampler(train_loader, pld, min_labelled)
+            else:
+                new_loader = _update_dataloader(train_loader, train_ds)
         # begin supervised training
         trainer = Trainer(model, loss, optimiser, patience, reload_best,
                           lr_scheduler=lr_scheduler,
@@ -195,15 +229,19 @@ class EphemeralTrainer:
                  pool: UnlabelledDataset,
                  loss: _Loss_fn, optimiser: str,
                  threshold: float,
-                 min_labelled: Optional[Union[float, int]] = .4,
+                 min_labelled: Optional[Union[float, int]] = None,
+                 random_fixed_length_sampler_length: Optional[int] = None,
                  log_dir: Optional[str] = None,
                  patience: Optional[int] = None,
                  reload_best: Optional[bool] = False,
                  lr_scheduler: Optional[str] = None,
                  lr_scheduler_kwargs: Optional[dict] = {},
+                 init_pseudo_label_dataset: Optional[torchdata.Dataset] = None,
                  device: _DeviceType = None,
                  pool_loader_kwargs: Optional[dict] = {},
                  *args, **kwargs):
+        assert not min_labelled or not random_fixed_length_sampler_length,\
+            "random_fixed_length_sampler_length and min_labelled are mutually exclusive"
         self._pool = pool
         self._model = model
         self._loss = loss
@@ -217,8 +255,11 @@ class EphemeralTrainer:
         self._log_dir = log_dir
         self._pool_loader_kwargs = pool_loader_kwargs
         self._min_labelled = min_labelled
+        self._rfls_len = random_fixed_length_sampler_length
         self._lr_scheduler = lr_scheduler
         self._lr_scheduler_kwargs = lr_scheduler_kwargs
+        self._init_pseudo_label_dataset = init_pseudo_label_dataset
+        self.last_pseudo_label_dataset = None
 
     def fit(self,
             train_loader: torchdata.DataLoader,
@@ -260,13 +301,16 @@ class EphemeralTrainer:
 
         pseudo_label_manager = PseudoLabelManager(
             pool=self._pool, model=self._model,
-            threshold=self._threshold, log_dir=self._log_dir,
+            threshold=self._threshold,
+            init_pseudo_labelled=self._init_pseudo_label_dataset,
+            log_dir=self._log_dir,
             device=self._device, **self._pool_loader_kwargs
         )
         trainer = create_pseudo_label_trainer(
             model=self._model, loss=self._loss, optimiser=self._optimiser,
             train_loader=train_loader, val_loader=val_loader,
-            pseudo_label_manager=pseudo_label_manager, min_labelled=self._min_labelled,
+            pseudo_label_manager=pseudo_label_manager,
+            rfls_len=self._rfls_len, min_labelled=self._min_labelled,
             patience=self._patience, reload_best=self._reload_best,
             epochs=epochs,
             lr_scheduler=self._lr_scheduler,
@@ -287,6 +331,10 @@ class EphemeralTrainer:
             es.reload_best()
 
         history['train_size'] = np.array(pseudo_label_manager.acquired_sizes) + len(train_loader.dataset)
+        if trainer.state.epoch == epochs:
+            self.last_pseudo_label_dataset = pseudo_label_manager.history[-2]
+        else:
+            self.last_pseudo_label_dataset = pseudo_label_manager.history[-(self._patience + 2)]
         return history
 
     def evaluate(self, data_loader: torchdata.DataLoader) -> dict:
