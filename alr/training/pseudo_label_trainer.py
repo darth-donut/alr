@@ -4,7 +4,7 @@ from typing import Optional, Dict, Sequence, Union
 import numpy as np
 import torch
 import torch.utils.data as torchdata
-from ignite.contrib.handlers import ProgressBar
+from alr.training.progress_bar.ignite_progress_bar import ProgressBar
 from ignite.engine import Engine, Events, \
     create_supervised_evaluator
 from ignite.metrics import Loss, Accuracy
@@ -272,7 +272,7 @@ class VanillaPLTrainer:
 
         # stage 2
         pl_history = defaultdict(list)
-        pbar = ProgressBar()
+        pbar = ProgressBar(desc=lambda _: "Vanilla PL trainer")
         train_evaluator = create_supervised_evaluator(
             self._model, metrics={'acc': Accuracy(), 'loss': Loss(self._lloss)},
             device=self._device
@@ -316,7 +316,7 @@ class VanillaPLTrainer:
             es.attach(val_evaluator)
 
         ssl_trainer.add_event_handler(Events.EPOCH_COMPLETED, _log_metrics)
-        pbar.attach(ssl_trainer, output_transform=lambda x: {'loss': x[0]})
+        pbar.attach(ssl_trainer)
 
         ssl_trainer.run(
             pool_loader, max_epochs=epoch2,

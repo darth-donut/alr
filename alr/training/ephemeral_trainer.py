@@ -12,7 +12,7 @@ from torch import nn
 import torch.utils.data as torchdata
 from ignite.engine import create_supervised_evaluator, Events, Engine
 from ignite.metrics import Accuracy, Loss
-from ignite.contrib.handlers import ProgressBar
+from alr.training.progress_bar.ignite_progress_bar import ProgressBar
 from alr.training import Trainer
 from alr.training.samplers import MinLabelledSampler, RandomFixedLengthSampler
 import copy
@@ -275,7 +275,7 @@ class EphemeralTrainer:
         )
 
         history = defaultdict(list)
-        pbar = ProgressBar()
+        pbar = ProgressBar(desc=lambda _: "Ephemeral")
 
         def _log_metrics(engine: Engine):
             # train_loss and train_acc are moving averages of the last epoch
@@ -319,7 +319,7 @@ class EphemeralTrainer:
         )
         # output of trainer are running averages of train_loss and train_acc (from the
         # last epoch of the supervised trainer)
-        pbar.attach(trainer, output_transform=lambda x: {'loss': x[0], 'acc': x[1]})
+        pbar.attach(trainer)
         if val_loader is not None and self._patience:
             es = EarlyStopper(self._model, self._patience, trainer, key='acc', mode='max')
             es.attach(val_evaluator)
