@@ -30,7 +30,7 @@ class ProgressBar:
             len(dataloader)
         )
         if self.desc is not None:
-            print(self.desc(engine), file=sys.stderr)
+            print(self.desc(engine), file=sys.stderr, end='')
         self.progress_bar.start()
 
     def on_complete(self, _):
