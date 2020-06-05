@@ -142,19 +142,20 @@ class PseudoLabelCollector:
             self._saver.global_step_from_engine(engine)
 
 
-# def _update_dataloader(loader: torchdata.DataLoader,
-#                        pseudo_labelled_dataset: torchdata.Dataset,
-#                        min_labelled: Union[float, int]):
-#     labelled_dataset = loader.dataset
-#     # attributes that usually go in dataloader's constructor
-#     attrs = [k for k in loader.__dict__.keys() if not k.startswith('_')]
-#     drop = ['dataset', 'sampler', 'batch_sampler', 'dataset_kind', 'batch_size', 'shuffle', 'drop_last']
-#     kwargs = {k: getattr(loader, k) for k in attrs if k not in drop}
-#     kwargs['dataset'] = torchdata.ConcatDataset((labelled_dataset, pseudo_labelled_dataset))
-#     kwargs['batch_sampler'] = MinLabelledSampler(
-#         labelled_dataset, pseudo_labelled_dataset, loader.batch_size, min_labelled=min_labelled,
-#     )
-#     return torchdata.DataLoader(**kwargs)
+def _update_dataloader_batch_sampler(loader: torchdata.DataLoader,
+                                     pseudo_labelled_dataset: torchdata.Dataset,
+                                     min_labelled: Union[float, int]):
+    labelled_dataset = loader.dataset
+    # attributes that usually go in dataloader's constructor
+    attrs = [k for k in loader.__dict__.keys() if not k.startswith('_')]
+    drop = ['dataset', 'sampler', 'batch_sampler', 'dataset_kind', 'batch_size', 'shuffle', 'drop_last']
+    kwargs = {k: getattr(loader, k) for k in attrs if k not in drop}
+    kwargs['dataset'] = torchdata.ConcatDataset((labelled_dataset, pseudo_labelled_dataset))
+    kwargs['batch_sampler'] = MinLabelledSampler(
+        labelled_dataset, pseudo_labelled_dataset, loader.batch_size, min_labelled=min_labelled,
+    )
+    return torchdata.DataLoader(**kwargs)
+
 
 def _update_dataloader(loader: torchdata.DataLoader,
                        dataset: torchdata.Dataset,
@@ -176,12 +177,15 @@ def create_pseudo_label_trainer(model: ALRModel, loss: _Loss_fn, optimiser: str,
                                 train_loader: torchdata.DataLoader, val_loader: torchdata.DataLoader,
                                 pseudo_label_manager: PseudoLabelManager,
                                 rfls_len: Optional[int] = None,
+                                min_labelled: Optional[Union[float, int]] = None,
                                 patience: Optional[int] = None, reload_best: Optional[bool] = None,
                                 epochs: Optional[int] = 1,
                                 lr_scheduler: Optional[str] = None,
                                 lr_scheduler_kwargs: Optional[dict] = {},
                                 device: _DeviceType = None,
                                 *args, **kwargs):
+    assert not min_labelled or not rfls_len, "rfls_len and min_labelled are mutually exclusive"
+
     def _step(engine: Engine, _):
         model.reset_weights()
         # update loader accordingly: if pld is not none, concatenate them
@@ -195,6 +199,8 @@ def create_pseudo_label_trainer(model: ALRModel, loss: _Loss_fn, optimiser: str,
                     train_loader, train_ds,
                     RandomFixedLengthSampler(train_ds, length=rfls_len, shuffle=True)
                 )
+            elif min_labelled:
+                new_loader = _update_dataloader_batch_sampler(train_loader, pld, min_labelled)
             else:
                 new_loader = _update_dataloader(train_loader, train_ds)
         # begin supervised training
@@ -215,44 +221,6 @@ def create_pseudo_label_trainer(model: ALRModel, loss: _Loss_fn, optimiser: str,
     e = Engine(_step)
     pseudo_label_manager.attach(e)
     return e
-# def create_pseudo_label_trainer(model: ALRModel, loss: _Loss_fn, optimiser: str,
-#                                 train_loader: torchdata.DataLoader, val_loader: torchdata.DataLoader,
-#                                 pseudo_label_manager: PseudoLabelManager,
-#                                 min_labelled: Optional[Union[float, int]] = .4,
-#                                 patience: Optional[int] = None, reload_best: Optional[bool] = None,
-#                                 epochs: Optional[int] = 1,
-#                                 lr_scheduler: Optional[str] = None,
-#                                 lr_scheduler_kwargs: Optional[dict] = {},
-#                                 device: _DeviceType = None,
-#                                 *args, **kwargs):
-#     def _step(engine: Engine, _):
-#         # always reset weights
-#         model.reset_weights()
-#
-#         # update loader accordingly: if pld is not none, concatenate them
-#         new_loader = train_loader
-#         pld = engine.state.pseudo_labelled_dataset
-#         if pld is not None:
-#             # update dataloader's dataset attribute
-#             new_loader = _update_dataloader(train_loader, pld, min_labelled)
-#         # begin supervised training
-#         trainer = Trainer(model, loss, optimiser, patience, reload_best,
-#                           lr_scheduler=lr_scheduler,
-#                           lr_scheduler_kwargs=lr_scheduler_kwargs,
-#                           device=device, *args, **kwargs)
-#         history = trainer.fit(
-#             new_loader, val_loader=val_loader,
-#             epochs=epochs,
-#         )
-#
-#         # if early stopping was applied w/ patience, then the actual train acc and loss should be
-#         # -patience from the final loss/acc UNLESS we reached the maximum number of epochs.
-#         if patience and len(history['train_loss']) != epochs:
-#             return history['train_loss'][-patience], history['train_acc'][-patience]
-#         return history["train_loss"][-1], history["train_acc"][-1]
-#     e = Engine(_step)
-#     pseudo_label_manager.attach(e)
-#     return e
 
 
 class EphemeralTrainer:
@@ -261,7 +229,7 @@ class EphemeralTrainer:
                  pool: UnlabelledDataset,
                  loss: _Loss_fn, optimiser: str,
                  threshold: float,
-                 # min_labelled: Optional[Union[float, int]] = .4,
+                 min_labelled: Optional[Union[float, int]] = None,
                  random_fixed_length_sampler_length: Optional[int] = None,
                  log_dir: Optional[str] = None,
                  patience: Optional[int] = None,
@@ -272,6 +240,8 @@ class EphemeralTrainer:
                  device: _DeviceType = None,
                  pool_loader_kwargs: Optional[dict] = {},
                  *args, **kwargs):
+        assert not min_labelled or not random_fixed_length_sampler_length,\
+            "random_fixed_length_sampler_length and min_labelled are mutually exclusive"
         self._pool = pool
         self._model = model
         self._loss = loss
@@ -284,7 +254,7 @@ class EphemeralTrainer:
         self._threshold = threshold
         self._log_dir = log_dir
         self._pool_loader_kwargs = pool_loader_kwargs
-        # self._min_labelled = min_labelled
+        self._min_labelled = min_labelled
         self._rfls_len = random_fixed_length_sampler_length
         self._lr_scheduler = lr_scheduler
         self._lr_scheduler_kwargs = lr_scheduler_kwargs
@@ -339,7 +309,8 @@ class EphemeralTrainer:
         trainer = create_pseudo_label_trainer(
             model=self._model, loss=self._loss, optimiser=self._optimiser,
             train_loader=train_loader, val_loader=val_loader,
-            pseudo_label_manager=pseudo_label_manager, rfls_len=self._rfls_len,
+            pseudo_label_manager=pseudo_label_manager,
+            rfls_len=self._rfls_len, min_labelled=self._min_labelled,
             patience=self._patience, reload_best=self._reload_best,
             epochs=epochs,
             lr_scheduler=self._lr_scheduler,
