@@ -4,7 +4,7 @@ from ignite.engine import Engine, Events, \
     create_supervised_evaluator, create_supervised_trainer
 from ignite.metrics import Loss, Accuracy, RunningAverage
 import torch.utils.data as torchdata
-from ignite.contrib.handlers import ProgressBar
+from alr.training.progress_bar.ignite_progress_bar import ProgressBar
 from ignite.contrib.handlers.param_scheduler import LRScheduler
 import numpy as np
 
@@ -64,7 +64,7 @@ class Trainer:
         if self._patience and val_loader is None:
             raise ValueError("If patience is specified, then val_loader must be provided in .fit().")
 
-        pbar = ProgressBar()
+        pbar = ProgressBar(desc=lambda _: "Training")
         history = defaultdict(list)
 
         val_evaluator = create_supervised_evaluator(
@@ -100,7 +100,7 @@ class Trainer:
             loss_fn=self._loss, device=self._device,
             output_transform=lambda x, y, y_pred, loss: (loss.item(), y_pred, y),
         )
-        pbar.attach(trainer, metric_names='all')
+        pbar.attach(trainer)
         if self._lr_scheduler is not None:
             scheduler = LRScheduler(self._lr_scheduler)
             trainer.add_event_handler(Events.EPOCH_COMPLETED, scheduler)
