@@ -40,6 +40,9 @@ def stratified_partition(ds: torchdata.Dataset, classes: int, size: int) \
         if all(i == 0 for i in count.values()):
             break
         y = ds[idx][1]
+        if isinstance(y, torch.Tensor):
+            # y is one-hot encoded
+            y = y.argmax().item()
         if count[y]:
             count[y] -= 1
             sampled_idxs.append(idx)
