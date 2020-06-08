@@ -5,6 +5,7 @@ import torch.utils.data as torchdata
 
 from alr.acquisition import AcquisitionFunction
 from contextlib import contextmanager
+import numpy as np
 
 
 class UnlabelledDataset(torchdata.Dataset):
@@ -163,7 +164,7 @@ class DataManager:
         self._unlabelled = unlabelled
         self._a_fn = acquisition_fn
 
-    def acquire(self, b: int) -> None:
+    def acquire(self, b: int) -> np.array:
         r"""
         Acquire `b` points from the :attr:`unlabelled` dataset and adds
         it to the :attr:`labelled` dataset.
@@ -172,13 +173,15 @@ class DataManager:
             b (int): number of points to acquire at once
 
         Returns:
-            NoneType: None
+            `np.array`: A numpy array containing indices that were selected by
+                        the acquisition function
         """
         assert b <= self.n_unlabelled
         idxs = self._a_fn(self._unlabelled, b)
         assert idxs.shape == (b,)
         labelled = self._unlabelled.label(idxs)
         self.append_to_labelled(labelled)
+        return idxs
 
     @property
     def n_labelled(self) -> int:
