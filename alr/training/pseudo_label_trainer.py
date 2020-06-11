@@ -320,7 +320,6 @@ class VanillaPLTrainer:
 
         ssl_trainer.run(
             pool_loader, max_epochs=epoch2,
-            seed=np.random.randint(0, 1e6)
         )
 
         if val_loader is not None and self._patience and self._reload_best:

@@ -115,10 +115,8 @@ class Trainer:
             for c in callbacks:
                 trainer.add_event_handler(Events.EPOCH_COMPLETED, c)
 
-        # pytorch-ignite v0.3.0's explicit seed parameter
         trainer.run(
             train_loader, max_epochs=epochs,
-            seed=np.random.randint(0, 1e6)
         )
         if val_loader is not None and self._patience and self._reload_best:
             es.reload_best()
