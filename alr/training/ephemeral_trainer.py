@@ -232,7 +232,7 @@ class EphemeralTrainer:
                  min_labelled: Optional[Union[float, int]] = None,
                  random_fixed_length_sampler_length: Optional[int] = None,
                  log_dir: Optional[str] = None,
-                 patience: Optional[int] = None,
+                 patience: Optional[Union[int, tuple]] = None,
                  reload_best: Optional[bool] = False,
                  lr_scheduler: Optional[str] = None,
                  lr_scheduler_kwargs: Optional[dict] = {},
@@ -266,6 +266,11 @@ class EphemeralTrainer:
             val_loader: Optional[torchdata.DataLoader] = None,
             iterations: Optional[int] = 1,
             epochs: Optional[int] = 1):
+        if self._patience:
+            pat1 = self._patience if isinstance(self._patience, int) else self._patience[0]
+            pat2 = self._patience if isinstance(self._patience, int) else self._patience[-1]
+        else:
+            pat1 = pat2 = None
         if self._patience and val_loader is None:
             raise ValueError("If patience is specified, then val_loader must be provided in .fit().")
 
@@ -311,7 +316,7 @@ class EphemeralTrainer:
             train_loader=train_loader, val_loader=val_loader,
             pseudo_label_manager=pseudo_label_manager,
             rfls_len=self._rfls_len, min_labelled=self._min_labelled,
-            patience=self._patience, reload_best=self._reload_best,
+            patience=pat1, reload_best=self._reload_best,
             epochs=epochs,
             lr_scheduler=self._lr_scheduler,
             lr_scheduler_kwargs=self._lr_scheduler_kwargs,
@@ -321,7 +326,7 @@ class EphemeralTrainer:
         # last epoch of the supervised trainer)
         pbar.attach(trainer)
         if val_loader is not None and self._patience:
-            es = EarlyStopper(self._model, self._patience, trainer, key='acc', mode='max')
+            es = EarlyStopper(self._model, pat2, trainer, key='acc', mode='max')
             es.attach(val_evaluator)
         trainer.add_event_handler(Events.EPOCH_COMPLETED, _log_metrics)
         trainer.run(
@@ -334,7 +339,7 @@ class EphemeralTrainer:
         if trainer.state.epoch == epochs:
             self.last_pseudo_label_dataset = pseudo_label_manager.history[-2]
         else:
-            self.last_pseudo_label_dataset = pseudo_label_manager.history[-(self._patience + 2)]
+            self.last_pseudo_label_dataset = pseudo_label_manager.history[-(pat2 + 2)]
         return history
 
     def evaluate(self, data_loader: torchdata.DataLoader) -> dict:
