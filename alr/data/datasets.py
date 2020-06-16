@@ -3,6 +3,7 @@ import torchvision
 from torch import nn
 from torch.nn import functional as F
 from dataclasses import dataclass
+from torch.nn.utils import weight_norm
 
 from enum import Enum
 from typing import Optional, Tuple
@@ -122,7 +123,8 @@ class Dataset(Enum):
         }
         return params[self]
 
-    def get_fixed(self, root: Optional[str] = 'data', which: Optional[int] = 0) -> Tuple[torchdata.Dataset, torchdata.Dataset, torchdata.Dataset]:
+    def get_fixed(self, root: Optional[str] = 'data', which: Optional[int] = 0) -> Tuple[
+        torchdata.Dataset, torchdata.Dataset, torchdata.Dataset]:
         r"""
         Returns a fixed train, pool, and test datasets. This is only used for experiments.
 
@@ -134,12 +136,16 @@ class Dataset(Enum):
         Returns:
             tuple: A tuple of train, pool, and test datasets.
         """
-        if self is not Dataset.MNIST:
+        if self is Dataset.MNIST:
+            idx_set = _mnist_20
+        elif self is Dataset.CIFAR10:
+            idx_set = _cifar10_1
+        else:
             raise NotImplementedError(f"Fixed points for {self} is not available yet.")
 
         train, test = self.get(root)
-        assert which < len(_mnist_20), f"Only {len(_mnist_20)} sets are available for {self}."
-        idxs = _mnist_20[which]
+        assert which < len(idx_set), f"Only {len(idx_set)} sets are available for {self}."
+        idxs = idx_set[which]
         cidxs = set(range(len(train))) - set(idxs)
         pool = torchdata.Subset(train, list(cidxs))
         train = torchdata.Subset(train, idxs)
@@ -212,6 +218,11 @@ _mnist_20 = [
      21174, 57606, 22846, 54399)
 ]
 
+_cifar10_1 = [
+    (33553, 9427, 199, 12447, 39489, 42724, 10822, 49498, 36958, 43106, 38695, 1414, 18471, 15118, 13466, 26497, 24148,
+     41514, 30263, 24712)
+]
+
 
 class MNISTNet(nn.Module):
     def __init__(self):
@@ -239,33 +250,57 @@ class MNISTNet(nn.Module):
 
 
 class CIFAR10Net(nn.Module):
-    def __init__(self):
-        # architecture (almost) similar to https://keras.io/examples/cifar10_cnn/
-        super().__init__()
-        self.conv1 = nn.Conv2d(3, 32, 3, padding=1)
-        self.conv2 = nn.Conv2d(32, 32, 3)
-        self.drop1 = nn.Dropout()
-        # 30x30
-        # max pool => 15x15
-        self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
-        self.conv4 = nn.Conv2d(64, 64, 3)
-        self.drop2 = nn.Dropout()
-        # 13x13
-        # max pool => 7x7
-        self.fc1 = nn.Linear(6 * 6 * 64, 512)
-        self.fc2 = nn.Linear(512, 10)
-        self.drop3 = nn.Dropout()
+    """
+    CNN from Mean Teacher paper
+    # taken from: https://github.com/EricArazo/PseudoLabeling/blob/2fbbbd3ca648cae453e3659e2e2ed44f71be5906/utils_pseudoLab/ssl_networks.py
+    """
+
+    def __init__(self, num_classes=10, drop_prob=.5):
+        super(CIFAR10Net, self).__init__()
+        self.activation = nn.LeakyReLU(0.1)
+        self.conv1a = weight_norm(nn.Conv2d(3, 128, 3, padding=1))
+        self.bn1a = nn.BatchNorm2d(128)
+        self.conv1b = weight_norm(nn.Conv2d(128, 128, 3, padding=1))
+        self.bn1b = nn.BatchNorm2d(128)
+        self.conv1c = weight_norm(nn.Conv2d(128, 128, 3, padding=1))
+        self.bn1c = nn.BatchNorm2d(128)
+        self.mp1 = nn.MaxPool2d(2, stride=2, padding=0)
+        self.drop = nn.Dropout(drop_prob)
+
+        self.conv2a = weight_norm(nn.Conv2d(128, 256, 3, padding=1))
+        self.bn2a = nn.BatchNorm2d(256)
+        self.conv2b = weight_norm(nn.Conv2d(256, 256, 3, padding=1))
+        self.bn2b = nn.BatchNorm2d(256)
+        self.conv2c = weight_norm(nn.Conv2d(256, 256, 3, padding=1))
+        self.bn2c = nn.BatchNorm2d(256)
+        self.mp2 = nn.MaxPool2d(2, stride=2, padding=0)
+
+        self.conv3a = weight_norm(nn.Conv2d(256, 512, 3, padding=0))
+        self.bn3a = nn.BatchNorm2d(512)
+        self.conv3b = weight_norm(nn.Conv2d(512, 256, 1, padding=0))
+        self.bn3b = nn.BatchNorm2d(256)
+        self.conv3c = weight_norm(nn.Conv2d(256, 128, 1, padding=0))
+        self.bn3c = nn.BatchNorm2d(128)
+        self.ap3 = nn.AvgPool2d(6, stride=2, padding=0)
+
+        self.fc1 = weight_norm(nn.Linear(128, num_classes))
 
     def forward(self, x):
-        x = F.relu(self.conv2(F.relu(self.conv1(x))))
-        x = self.drop1(F.max_pool2d(x, 2))
+        x = self.activation(self.bn1a(self.conv1a(x)))
+        x = self.activation(self.bn1b(self.conv1b(x)))
+        x = self.activation(self.bn1c(self.conv1c(x)))
+        x = self.mp1(x)
+        x = self.drop(x)
 
-        x = F.relu(self.conv4(F.relu(self.conv3(x))))
-        x = self.drop2(F.max_pool2d(x, 2))
+        x = self.activation(self.bn2a(self.conv2a(x)))
+        x = self.activation(self.bn2b(self.conv2b(x)))
+        x = self.activation(self.bn2c(self.conv2c(x)))
+        x = self.mp2(x)
+        x = self.drop(x)
 
-        x = x.view(-1, 6 * 6 * 64)
-        x = self.drop3(F.relu(self.fc1(x)))
-
-        x = self.fc2(x)
-        return F.log_softmax(x, dim=-1)
-
+        x = self.activation(self.bn3a(self.conv3a(x)))
+        x = self.activation(self.bn3b(self.conv3b(x)))
+        x = self.activation(self.bn3c(self.conv3c(x)))
+        x = self.ap3(x)
+        x = x.view(-1, 128)
+        return F.log_softmax(self.fc1(x), dim=-1)
