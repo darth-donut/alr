@@ -4,6 +4,7 @@ from typing import Optional
 from matplotlib import cm
 import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib as mpl
 
 
 def jitter(x):
@@ -31,6 +32,7 @@ def confidence_plot(
 
 def reliability_plot(
         bins_E_M, accuracies_E_N, counts_E_N, axis,
+        title: Optional[str] = "Reliability plot",
         cmap: Optional[str] = 'viridis'
 ):
     assert accuracies_E_N.shape == counts_E_N.shape
@@ -51,12 +53,14 @@ def reliability_plot(
     axis.set_ylim(bottom=-0.05, top=1)
     axis.set_ylabel("Accuracy of pseudo-label")
     axis.set_xlabel("Confidence")
-    axis.set_title(f"Reliability plot")
+    if title:
+        axis.set_title(title)
     axis.set_yticks(np.arange(0, 1.1, .1))
     axis.plot(range(len(bins) - 1), np.arange(.1, 1.1, .1) - .05, color='grey', alpha=.3, linestyle='-.')
 
 
-def reliability_hist_plot(bins_E_M, counts_E_N, axis, cmap: Optional[str] = 'viridis'):
+def reliability_hist_plot(bins_E_M, counts_E_N, axis, cmap: Optional[str] = 'viridis',
+                          xticklabels=True, title="Confidence histogram"):
     cmap = cm.get_cmap(cmap)
     E = bins_E_M.shape[0]
     for idx, (x, y) in enumerate(zip(bins_E_M, counts_E_N)):
@@ -69,18 +73,24 @@ def reliability_hist_plot(bins_E_M, counts_E_N, axis, cmap: Optional[str] = 'vir
         [f"({bins[idx]:.1f},{b:.1f}]" for idx, b in enumerate(bins[1:])],
         rotation=45
     )
-    axis.set_xticks(range(len(bins) - 1))
     axis.set_ylim(top=1)
     axis.set_ylabel("Proportion")
-    axis.set_xlabel("Confidence")
-    axis.set_title(f"Confidence histogram")
+    if xticklabels:
+        axis.set_xticks(range(len(bins) - 1))
+        axis.set_xlabel("Confidence")
+    else:
+        axis.set_xticks(())
+    axis.set_title(title)
 
 
 # todo(harry): can accommodate iterations too
-def ece_plot(ece_E, axis, cmap: Optional[str] = 'viridis'):
+def ece_plot(ece_E, axis, label: Optional[str] = None, cmap: Optional[str] = 'viridis'):
     cmap = cm.get_cmap(cmap)
     E = ece_E.shape[0]
-    axis.plot(range(1, E + 1), ece_E)
+    if label:
+        axis.plot(range(1, E + 1), ece_E, label=label)
+    else:
+        axis.plot(range(1, E + 1), ece_E)
     axis.set_title("Expected Calibration Error (ECE)")
     axis.set_ylabel("ECE")
     axis.set_xlabel("Epoch")
@@ -152,17 +162,12 @@ def plot_labelled_classes(metric: dict, axis):
     axis.set_title("BALD-acquired classes (so far)")
 
 
-def diagnostics(calib_metrics: str, metrics: str):
-    calib_metrics = Path(calib_metrics)
-    metrics = Path(metrics)
-    pkls = list(calib_metrics.rglob("*.pkl"))
-    with open(metrics, "rb") as fp:
-        metrics = pickle.load(fp)
-
+def parse_calib_dir(calib_metrics: str):
     def num_sort(fname: Path):
         basename = fname.name
         return int(basename[:basename.find("_")])
-
+    calib_metrics = Path(calib_metrics)
+    pkls = list(calib_metrics.rglob("*.pkl"))
     pkls = sorted(pkls, key=num_sort)
     buffer = []
     for p in pkls:
@@ -195,7 +200,22 @@ def diagnostics(calib_metrics: str, metrics: str):
     bin_accuracy_E_N = np.stack(bin_accuracy, axis=0)
     counts_E_N = np.stack(counts, axis=0)
     ece_E = np.stack(ece, axis=0)
-    entropy_E_N = np.stack(entropy, axis=0)
+    try:
+        # can only do so if entropy is a non-jagged matrix (non-pool set calib)
+        entropy_E_N = np.stack(entropy, axis=0)
+    except:
+        entropy_E_N = None
+    return confidences_E_N, proportions_E_N, accuracies_E, \
+           bins_E_M, bin_accuracy_E_N, counts_E_N, ece_E, entropy_E_N
+
+
+def diagnostics(calib_metrics: str, metrics: str):
+    metrics = Path(metrics)
+    confidences_E_N, proportions_E_N, accuracies_E, \
+        bins_E_M, bin_accuracy_E_N, counts_E_N, ece_E,\
+        entropy_E_N = parse_calib_dir(calib_metrics)
+    with open(metrics, "rb") as fp:
+        metrics = pickle.load(fp)
 
     fig, axes = plt.subplots(3, 3, figsize=(3 * 5, 3 * 5))
     axes = axes.flatten()
@@ -203,7 +223,8 @@ def diagnostics(calib_metrics: str, metrics: str):
     ece_plot(ece_E, axes[1])
     plot_val_loss(metrics, axes[2])
     reliability_hist_plot(bins_E_M, counts_E_N, axes[3])
-    plot_entropy(entropy_E_N, num_classes=10, axis=axes[4])
+    if entropy_E_N is not None:
+        plot_entropy(entropy_E_N, num_classes=10, axis=axes[4])
     plot_labelled_classes(metrics, axis=axes[5])
     reliability_plot(bins_E_M, bin_accuracy_E_N, counts_E_N, axes[6])
     plot_accuracy(accuracies_E, get_val_acc(metrics), axis=axes[7])
@@ -213,3 +234,18 @@ def diagnostics(calib_metrics: str, metrics: str):
         if i % 3 == 0:
             ax.grid()
     fig.tight_layout()
+
+
+def solo_reliability_plot(calib_metrics, label='Iteration'):
+    confidences_E_N, proportions_E_N, accuracies_E, \
+    bins_E_M, bin_accuracy_E_N, counts_E_N, ece_E, \
+    entropy_E_N = parse_calib_dir(calib_metrics)
+
+    fig = plt.figure(constrained_layout=True, figsize=(8, 8))
+    spec = fig.add_gridspec(ncols=2, nrows=2, width_ratios=[29, 1], height_ratios=[2, 7], )
+    axes = [fig.add_subplot(spec[0, 0]), fig.add_subplot(spec[1, 0]), fig.add_subplot(spec[:, -1])]
+    reliability_hist_plot(bins_E_M, counts_E_N, axes[0], xticklabels=False, title="Reliability plot")
+    reliability_plot(bins_E_M, bin_accuracy_E_N, counts_E_N, axes[1], title=None)
+    norm = mpl.colors.Normalize(vmin=1, vmax=accuracies_E.shape[0])
+    fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cm.get_cmap('viridis')),
+                 orientation='vertical', label=label, cax=axes[2])
