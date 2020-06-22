@@ -506,20 +506,24 @@ def _calib_metrics(model, ds, log_dir,
 
 
 class _WithTransform(torchdata.Dataset):
-    def __init__(self, dataset: torchdata.Dataset, transform):
+    def __init__(self, dataset: torchdata.Dataset, transform, with_targets):
         super(_WithTransform, self).__init__()
         self._dataset = dataset
         self._transform = transform
+        self._with_targets = with_targets
 
     def __getitem__(self, idx):
-        # self._dataset[idx] is expected to return features only (i.e. (x,) not (x, y))
+        if self._with_targets:
+            x, y = self._dataset[idx]
+            return self._transform(x), y
+        # (x,) only
         return self._transform(self._dataset[idx])
 
     def __len__(self):
         return len(self._dataset)
 
 
-def temp_ds_transform(transform):
+def temp_ds_transform(transform, with_targets=False):
     def _trans(dataset: torchdata.Dataset) -> torchdata.Dataset:
-        return _WithTransform(dataset, transform)
+        return _WithTransform(dataset, transform, with_targets)
     return _trans
