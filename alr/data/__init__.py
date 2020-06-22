@@ -164,20 +164,26 @@ class DataManager:
         self._unlabelled = unlabelled
         self._a_fn = acquisition_fn
 
-    def acquire(self, b: int) -> np.array:
+    def acquire(self, b: int, transform=None) -> np.array:
         r"""
         Acquire `b` points from the :attr:`unlabelled` dataset and adds
         it to the :attr:`labelled` dataset.
 
         Args:
             b (int): number of points to acquire at once
+            transform (Callable, optional): transform the unlabelled dataset before
+                giving it to the acquisition function. The function is expected
+                to take and return a dataset.
 
         Returns:
             `np.array`: A numpy array containing indices that were selected by
                         the acquisition function
         """
         assert b <= self.n_unlabelled
-        idxs = self._a_fn(self._unlabelled, b)
+        if transform is None:
+            idxs = self._a_fn(self._unlabelled, b)
+        else:
+            idxs = self._a_fn(transform(self._unlabelled), b)
         assert idxs.shape == (b,)
         labelled = self._unlabelled.label(idxs)
         self.append_to_labelled(labelled)
