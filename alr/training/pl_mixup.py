@@ -44,12 +44,13 @@ class PDS(torchdata.Dataset):
         self._with_metadata = True
         self._new_targets = None
         self._target_transform = target_transform
+        self._original_labels = False
 
     def __getitem__(self, idx):
         (img_raw, target), idx, mark = self.dataset[idx]
 
         # override target
-        if self._new_targets is not None:
+        if self._new_targets is not None and (not self._original_labels):
             target = self._new_targets[idx]
 
         if self._augmentation:
@@ -64,6 +65,15 @@ class PDS(torchdata.Dataset):
 
     def __len__(self):
         return len(self.dataset)
+
+    @contextmanager
+    def original_labels(self):
+        if not self._original_labels:
+            self._original_labels = True
+            yield
+            self._original_labels = False
+        else:
+            yield self
 
     @contextmanager
     def no_fluff(self):
@@ -462,12 +472,14 @@ class PLUpdater:
     def _on_epoch_end(self, engine: Engine):
         self._pool.override_targets(self._pseudo_labels)
 
+        # original pool labels w/o augmentation and metadata from PDS
         with self._pool.no_augmentation():
             with self._pool.no_fluff():
-                _calib_metrics(
-                    self._model, self._pool, self._log_dir,
-                    other_engine=engine, device=self._device
-                )
+                with self._pool.original_labels():
+                    _calib_metrics(
+                        self._model, self._pool, self._log_dir,
+                        other_engine=engine, device=self._device
+                    )
 
 
 def _calib_metrics(model, ds, log_dir,
@@ -483,7 +495,8 @@ def _calib_metrics(model, ds, log_dir,
         model, metrics=None, device=device
     )
     pps = PLPredictionSaver(
-        log_dir=log_dir, pred_transform=pred_transform,
+        log_dir=log_dir,
+        pred_transform=pred_transform,
     )
     pps.attach(save_pl_metrics)
     if other_engine is not None:
