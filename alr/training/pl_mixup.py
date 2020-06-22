@@ -1,6 +1,5 @@
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from alr.data import UnlabelledDataset
 from alr.training.progress_bar.ignite_progress_bar import ProgressBar
 from alr.training.samplers import RandomFixedLengthSampler, MinLabelledSampler
 import torch.utils.data as torchdata
@@ -224,6 +223,7 @@ class PLMixupTrainer:
                  test_transform: Callable,
                  optimiser_kwargs,
                  loader_kwargs,
+                 log_dir: str,
                  rfls_length: int,
                  alpha: Optional[float] = 1.0,
                  min_labelled: Optional[Union[int, float]] = 16,
@@ -249,6 +249,7 @@ class PLMixupTrainer:
         self._num_classes = num_classes
         self._alpha = alpha
         self._lr_patience = lr_patience
+        self._log_dir = log_dir
 
     def _instantiate_optimiser(self):
         return getattr(
@@ -375,6 +376,7 @@ class PLMixupTrainer:
             self._model, optimiser,
             pool, alpha=self._alpha,
             num_classes=self._num_classes,
+            log_dir=self._log_dir,
             device=self._device
         )
         es = EarlyStopper(
@@ -410,7 +412,7 @@ class PLMixupTrainer:
         return evaluator.run(data_loader).metrics
 
 
-def create_plmixup_trainer(model, optimiser, pool, alpha, num_classes, device):
+def create_plmixup_trainer(model, optimiser, pool, alpha, num_classes, log_dir, device):
     def _step(engine: Engine, batch):
         model.train()
         img_raw, img_aug, target, idx, mark = batch
@@ -425,15 +427,20 @@ def create_plmixup_trainer(model, optimiser, pool, alpha, num_classes, device):
         optimiser.step()
         return loss.item(), img_raw, img_aug, target, idx, mark
     e = Engine(_step)
-    PLUpdater(model, pool, num_classes).attach(e)
+    PLUpdater(
+        model, pool, log_dir=log_dir,
+        num_class=num_classes, device=device
+    ).attach(e)
     return e
 
 
 class PLUpdater:
-    def __init__(self, model, pool, num_class):
+    def __init__(self, model, pool, log_dir, num_class, device=None):
         self._pseudo_labels = torch.empty(size=(len(pool), num_class))
         self._model = model
         self._pool = pool
+        self._log_dir = log_dir
+        self._device = device
 
     def attach(self, engine: Engine):
         engine.add_event_handler(Events.ITERATION_COMPLETED, self._on_iteration_end)
@@ -453,5 +460,28 @@ class PLUpdater:
 
     def _on_epoch_end(self, engine: Engine):
         self._pool.override_targets(self._pseudo_labels)
-        # todo: save calib_metrics
+        _calib_metrics(
+            self._model, self._pool, self._log_dir,
+            other_engine=engine, device=self._device
+        )
 
+
+def _calib_metrics(model, ds, log_dir,
+                   other_engine=None, device=None,
+                   pred_transform=lambda x: x.exp()):
+    kwargs = {} if not torch.cuda.is_available() else dict(
+        num_workers=4, pin_memory=True
+    )
+    loader = torchdata.DataLoader(
+        ds, shuffle=False, batch_size=512, **kwargs
+    )
+    save_pl_metrics = create_supervised_evaluator(
+        model, metrics=None, device=device
+    )
+    pps = PLPredictionSaver(
+        log_dir=log_dir, pred_transform=pred_transform,
+    )
+    pps.attach(save_pl_metrics)
+    if other_engine is not None:
+        pps.global_step_from_engine(other_engine)
+    save_pl_metrics.run(loader)
