@@ -1,5 +1,5 @@
 import torch.utils.data as torchdata
-import torchvision
+import torchvision as tv
 from torch import nn
 from torch.nn import functional as F
 from dataclasses import dataclass
@@ -43,12 +43,16 @@ class Dataset(Enum):
     CIFAR100 = "CIFAR100"
     RepeatedMNIST = "RepeatedMNIST"
 
-    def get(self, root: Optional[str] = 'data') -> Tuple[torchdata.Dataset, torchdata.Dataset]:
+    def get(self,
+            root: Optional[str] = 'data',
+            raw: Optional[bool] = False) -> Tuple[torchdata.Dataset, torchdata.Dataset]:
         r"""
         Return (train, test) tuple of datasets.
 
         Args:
             root (str, optional): root path where data will be read from or downloaded to
+            raw (bool, optional): if `True`, then training set will not be transformed (i.e.
+                no normalisation, ToTensor, etc.); note, the test set *WILL* be transformed.
 
         Returns:
             tuple: a 2-tuple of (train, test) datasets
@@ -58,21 +62,24 @@ class Dataset(Enum):
             transforms.Normalize(*self.normalisation_params)
         ])
         test_transform = train_transform
-        train_params = dict(root=root, transform=train_transform, train=True, download=True)
+        if raw:
+            train_params = dict(root=root, train=True, download=True)
+        else:
+            train_params = dict(root=root, transform=train_transform, train=True, download=True)
         test_params = dict(root=root, transform=test_transform, train=False, download=True)
         if self in {Dataset.MNIST,
                     Dataset.FashionMNIST,
                     Dataset.CIFAR10,
                     Dataset.CIFAR100}:
-            train = getattr(torchvision.datasets, self.value)(**train_params)
-            test = getattr(torchvision.datasets, self.value)(**test_params)
+            train = getattr(tv.datasets, self.value)(**train_params)
+            test = getattr(tv.datasets, self.value)(**test_params)
         elif self in {Dataset.EMNISTBalanced, Dataset.EMNISTMerge}:
             split = 'balanced' if self is Dataset.EMNISTBalanced else 'bymerge'
-            train = torchvision.datasets.EMNIST(**train_params, split=split)
-            test = torchvision.datasets.EMNIST(**test_params, split=split)
+            train = tv.datasets.EMNIST(**train_params, split=split)
+            test = tv.datasets.EMNIST(**test_params, split=split)
         elif self is Dataset.RepeatedMNIST:
-            train = torchvision.datasets.MNIST(**train_params)
-            test = torchvision.datasets.MNIST(**test_params)
+            train = tv.datasets.MNIST(**train_params)
+            test = tv.datasets.MNIST(**test_params)
             train = torchdata.ConcatDataset([train] * 3)
         else:
             raise ValueError(f"{self} dataset hasn't been implemented.")
@@ -93,7 +100,7 @@ class Dataset(Enum):
             Dataset.EMNISTMerge: ((0.1736,), (0.3317,)),
             Dataset.EMNISTBalanced: ((0.1751,), (0.3332,)),
             Dataset.CIFAR10: ((0.49139968, 0.48215841, 0.44653091),
-                              (0.24703223, 0.24348513, 0.26158784)),
+                              (0.2023, 0.1994, 0.2010)),
             Dataset.CIFAR100: ((0.50707516, 0.48654887, 0.44091784),
                                (0.26733429, 0.25643846, 0.27615047)),
         }
@@ -123,7 +130,8 @@ class Dataset(Enum):
         }
         return params[self]
 
-    def get_fixed(self, root: Optional[str] = 'data', which: Optional[int] = 0) -> Tuple[
+    def get_fixed(self, root: Optional[str] = 'data', which: Optional[int] = 0,
+                  raw: Optional[bool] = False) -> Tuple[
         torchdata.Dataset, torchdata.Dataset, torchdata.Dataset]:
         r"""
         Returns a fixed train, pool, and test datasets. This is only used for experiments.
@@ -132,6 +140,8 @@ class Dataset(Enum):
             root (str, optional): root path where data will be read from or downloaded to.
             which (int, optional): there are multiple possible sets of fixed points for a given dataset.
                 This argument specifies which of the multiple possible ones to choose from.
+            raw (bool, optional): similar to :meth:`get`, train will not contain any
+                transform whatsoever. (Test will still have ToTensor and Normalisation.)
 
         Returns:
             tuple: A tuple of train, pool, and test datasets.
@@ -143,13 +153,25 @@ class Dataset(Enum):
         else:
             raise NotImplementedError(f"Fixed points for {self} is not available yet.")
 
-        train, test = self.get(root)
+        train, test = self.get(root, raw=raw)
         assert which < len(idx_set), f"Only {len(idx_set)} sets are available for {self}."
         idxs = idx_set[which]
         cidxs = set(range(len(train))) - set(idxs)
         pool = torchdata.Subset(train, list(cidxs))
         train = torchdata.Subset(train, idxs)
         return train, pool, test
+
+    @property
+    def get_augmentation(self):
+        if self is not Dataset.CIFAR10:
+            raise NotImplementedError(f"get_raw not available for {self}")
+        data_augmentation = tv.transforms.Compose([
+            tv.transforms.Pad(2, padding_mode='reflect'),
+            tv.transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
+            tv.transforms.RandomCrop(32),
+            tv.transforms.RandomHorizontalFlip(),
+        ])
+        return data_augmentation
 
     @property
     def model(self) -> nn.Module:
