@@ -485,3 +485,23 @@ def _calib_metrics(model, ds, log_dir,
     if other_engine is not None:
         pps.global_step_from_engine(other_engine)
     save_pl_metrics.run(loader)
+
+
+class _WithTransform(torchdata.Dataset):
+    def __init__(self, dataset: torchdata.Dataset, transform):
+        super(_WithTransform, self).__init__()
+        self._dataset = dataset
+        self._transform = transform
+
+    def __getitem__(self, idx):
+        # self._dataset[idx] is expected to return features only (i.e. (x,) not (x, y))
+        return self._transform(self._dataset[idx])
+
+    def __len__(self):
+        return len(self._dataset)
+
+
+def temp_ds_transform(transform):
+    def _trans(dataset: torchdata.Dataset) -> torchdata.Dataset:
+        return _WithTransform(dataset, transform)
+    return _trans
