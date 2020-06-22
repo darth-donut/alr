@@ -349,7 +349,7 @@ class PLMixupTrainer:
                         pseudo_labels.append(self._model(x).exp().detach().cpu())
         pool.override_targets(torch.cat(pseudo_labels))
         plab_acc = pool.override_accuracy
-        pbar.log_message(f"\tOverridden labels' acc: {plab_acc}")
+        pbar.log_message(f"\t*End of stage 1*: overridden labels' acc: {plab_acc}")
         history['override_acc'].append(plab_acc)
 
         # start training with PL
@@ -435,7 +435,8 @@ def create_plmixup_trainer(model, optimiser, pool, alpha, num_classes, log_dir, 
 
 
 class PLUpdater:
-    def __init__(self, model, pool, log_dir, num_class, device=None):
+    def __init__(self, model: nn.Module, pool: PDS,
+                 log_dir: str, num_class: int, device=None):
         self._pseudo_labels = torch.empty(size=(len(pool), num_class))
         self._model = model
         self._pool = pool
@@ -460,10 +461,13 @@ class PLUpdater:
 
     def _on_epoch_end(self, engine: Engine):
         self._pool.override_targets(self._pseudo_labels)
-        _calib_metrics(
-            self._model, self._pool, self._log_dir,
-            other_engine=engine, device=self._device
-        )
+
+        with self._pool.no_augmentation():
+            with self._pool.no_fluff():
+                _calib_metrics(
+                    self._model, self._pool, self._log_dir,
+                    other_engine=engine, device=self._device
+                )
 
 
 def _calib_metrics(model, ds, log_dir,
