@@ -233,8 +233,8 @@ class PLMixupTrainer:
                  test_transform: Callable,
                  optimiser_kwargs,
                  loader_kwargs,
-                 log_dir: str,
                  rfls_length: int,
+                 log_dir: Optional[str] = None,
                  alpha: Optional[float] = 1.0,
                  min_labelled: Optional[Union[int, float]] = 16,
                  num_classes: Optional[int] = 10,
@@ -472,14 +472,15 @@ class PLUpdater:
     def _on_epoch_end(self, engine: Engine):
         self._pool.override_targets(self._pseudo_labels)
 
-        # original pool labels w/o augmentation and metadata from PDS
-        with self._pool.no_augmentation():
-            with self._pool.no_fluff():
-                with self._pool.original_labels():
-                    _calib_metrics(
-                        self._model, self._pool, self._log_dir,
-                        other_engine=engine, device=self._device
-                    )
+        if self._log_dir is not None:
+            # original pool labels w/o augmentation and metadata from PDS
+            with self._pool.no_augmentation():
+                with self._pool.no_fluff():
+                    with self._pool.original_labels():
+                        _calib_metrics(
+                            self._model, self._pool, self._log_dir,
+                            other_engine=engine, device=self._device
+                        )
 
 
 def _calib_metrics(model, ds, log_dir,
