@@ -91,6 +91,8 @@ class BALD(AcquisitionFunction):
         self._device = device
         self._subset = subset
         self._dl_params = data_loader_params
+        # store recent scores
+        self.recent_score = None
         assert not self._dl_params.get('shuffle', False)
 
     def __call__(self, X_pool: torchdata.Dataset, b: int) -> np.array:
@@ -116,8 +118,9 @@ class BALD(AcquisitionFunction):
             I = (H + E).cpu()
             assert torch.isfinite(I).all()
             assert I.shape == (pool_size,)
-            result = torch.argsort(I, descending=True).numpy()[:b]
-            return idxs[result]
+            result = torch.argsort(I, descending=True).numpy()
+            self.recent_score = result
+            return idxs[result[:b]]
 
 
 class ICAL(AcquisitionFunction):
@@ -318,3 +321,19 @@ class ICAL(AcquisitionFunction):
         res *= term_max.exp_()
         assert torch.isfinite(res).all()
         return res
+
+
+def _bald_score(pred_fn, dataloader, device):
+    # for research debugging only
+    with torch.no_grad():
+        mc_preds: torch.Tensor = torch.cat(
+            [pred_fn(x.to(device) if device else x) for x, _ in dataloader],
+            dim=1
+        )
+        mc_preds = mc_preds.double()
+        mean_mc_preds = mc_preds.mean(dim=0)
+        H = -(mean_mc_preds * torch.log(mean_mc_preds + 1e-5)).sum(dim=1)
+        E = (mc_preds * torch.log(mc_preds + 1e-5)).sum(dim=2).mean(dim=0)
+        I = (H + E).cpu()
+        assert torch.isfinite(I).all()
+        return torch.argsort(I, descending=True).numpy()

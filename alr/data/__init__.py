@@ -1,4 +1,4 @@
-from typing import Callable, Sequence, Optional
+from typing import Callable, Sequence, Optional, Tuple
 
 import torch
 import torch.utils.data as torchdata
@@ -83,6 +83,18 @@ class UnlabelledDataset(torchdata.Dataset):
     def __len__(self) -> int:
         return self._len
 
+    def convert_idx(self, idxs: np.array) -> np.array:
+        r"""
+        Given a set of indices relative to the current state of UnlabelledDataset,
+        return the true/absolute index of the original pool dataset.
+        Args:
+            idxs (np.array): sequence of indices
+
+        Returns:
+            `np.array`: absolute index
+        """
+        return self._idx_mask[idxs]
+
     @property
     def labelled_indices(self) -> torch.Tensor:
         r"""
@@ -164,7 +176,7 @@ class DataManager:
         self._unlabelled = unlabelled
         self._a_fn = acquisition_fn
 
-    def acquire(self, b: int, transform=None) -> np.array:
+    def acquire(self, b: int, transform=None) -> Tuple[np.array, torchdata.Dataset]:
         r"""
         Acquire `b` points from the :attr:`unlabelled` dataset and adds
         it to the :attr:`labelled` dataset.
@@ -176,8 +188,13 @@ class DataManager:
                 to take and return a dataset.
 
         Returns:
-            `np.array`: A numpy array containing indices that were selected by
-                        the acquisition function
+            `Tuple[np.array, torch.utils.data.Dataset]`: A tuple consisting of
+                (1) numpy array with indices that were selected by the acquisition function; and
+                (2) Subset-type dataset with the `b` points that were freshly labelled
+
+        Notes:
+            the returned numpy array of indices indexes the original pool dataset. I.e., it's the
+            "absolute" index relative to the original pool set.
         """
         assert b <= self.n_unlabelled
         if transform is None:
@@ -185,9 +202,12 @@ class DataManager:
         else:
             idxs = self._a_fn(transform(self._unlabelled), b)
         assert idxs.shape == (b,)
+        # get true indices (i.e. index from *full* pool set)
+        true_idxs = self._unlabelled.convert_idx(idxs)
+        # it's important to get true_idxs before calling label(),
         labelled = self._unlabelled.label(idxs)
         self.append_to_labelled(labelled)
-        return idxs
+        return true_idxs, labelled
 
     @property
     def n_labelled(self) -> int:
