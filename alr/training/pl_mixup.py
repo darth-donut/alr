@@ -463,12 +463,11 @@ class PLUpdater:
         with torch.no_grad():
             self._model.eval()
             pld_mask = mark == IndexMarker.PSEUDO_LABELLED
-            if pld_mask.any():
-                # unaugmented, raw, pseudo-labelled images
-                pld_img = img_raw[pld_mask]
-                # get *softmax* predictions -- exponentiate the output!
-                new_pld = self._model(pld_img).exp().detach().cpu()
-                self._pseudo_labels[idx[pld_mask]] = new_pld
+            # unaugmented, raw, pseudo-labelled images
+            pld_img = img_raw[pld_mask]
+            # get *softmax* predictions -- exponentiate the output!
+            new_pld = self._model(pld_img).exp().detach().cpu()
+            self._pseudo_labels[idx[pld_mask]] = new_pld
 
     def _on_epoch_end(self, engine: Engine):
         self._pool.override_targets(self._pseudo_labels)
