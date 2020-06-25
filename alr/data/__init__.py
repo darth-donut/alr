@@ -118,7 +118,7 @@ class UnlabelledDataset(torchdata.Dataset):
             # xxx: because it's 2 am and i'm lazy. (note to self: could save these targets in .label() fn)
             warnings.warn("UnlabelledDataset was initialised with label_fn but labelled_classes was invoked.")
         classes = []
-        for i in self.labelled_indices.tolist():
+        for i in self.labelled_indices:
             classes.append(self._dataset[i][1])
         return classes
 
