@@ -336,4 +336,4 @@ def _bald_score(pred_fn, dataloader, device):
         E = (mc_preds * torch.log(mc_preds + 1e-5)).sum(dim=2).mean(dim=0)
         I = (H + E).cpu()
         assert torch.isfinite(I).all()
-        return torch.argsort(I, descending=True).numpy()
+        return I.numpy()
