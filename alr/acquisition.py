@@ -119,7 +119,7 @@ class BALD(AcquisitionFunction):
             assert torch.isfinite(I).all()
             assert I.shape == (pool_size,)
             result = torch.argsort(I, descending=True).numpy()
-            self.recent_score = result
+            self.recent_score = I.numpy()
             return idxs[result[:b]]
 
 
