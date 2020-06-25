@@ -93,7 +93,7 @@ class UnlabelledDataset(torchdata.Dataset):
         Returns:
             `np.array`: absolute index
         """
-        return self._idx_mask[idxs]
+        return self._idx_mask[idxs].numpy()
 
     @property
     def labelled_indices(self) -> list:
