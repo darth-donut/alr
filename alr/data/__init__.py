@@ -96,14 +96,14 @@ class UnlabelledDataset(torchdata.Dataset):
         return self._idx_mask[idxs]
 
     @property
-    def labelled_indices(self) -> torch.Tensor:
+    def labelled_indices(self) -> list:
         r"""
-        Returns a 1-D tensor of indices that were labelled in the past.
+        Returns a list of indices that were labelled in the past.
 
         Returns:
-            `torch.Tensor`: all the indices that were labelled by :meth:`label`
+            `list`: all the indices that were labelled by :meth:`label`
         """
-        return torch.nonzero(~self._mask).flatten()
+        return torch.nonzero(~self._mask).flatten().tolist()
 
     @property
     def labelled_classes(self) -> list:
