@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torch.distributions as dist
 import torch.utils.data as torchdata
+from batchbald_redux.batchbald import get_batchbald_batch
 
 from alr.utils._type_aliases import _DeviceType
 
@@ -337,3 +338,37 @@ def _bald_score(pred_fn, dataloader, device):
         I = (H + E).cpu()
         assert torch.isfinite(I).all()
         return I.numpy()
+
+
+class BatchBALD(AcquisitionFunction):
+    def __init__(self,
+                 pred_fn: _BayesianCallable,
+                 device: _DeviceType = None,
+                 num_samples: int = 10_000,
+                 **data_loader_params):
+        self._pred_fn = pred_fn
+        self._device = device
+        self._dl_params = data_loader_params
+        self._num_samples = num_samples
+        # store recent scores
+        self.recent_score = None
+        assert not self._dl_params.get('shuffle', False)
+
+    def __call__(self, X_pool: torchdata.Dataset, b: int) -> np.array:
+        dl = torchdata.DataLoader(X_pool, **self._dl_params)
+        with torch.no_grad():
+            mc_preds_K_N_C: torch.Tensor = torch.cat(
+                [self._pred_fn(x.to(self._device) if self._device else x) for x in dl],
+                dim=1
+            )
+            mc_preds_N_K_C = mc_preds_K_N_C.double().permute((1, 0, 2))
+            assert mc_preds_N_K_C.size()[0] == len(X_pool)
+        candidate_batch = get_batchbald_batch(
+            mc_preds_N_K_C,
+            batch_size=b,
+            num_samples=self._num_samples,
+            dtype=torch.double,
+            device=self._device
+        )
+        self.recent_score = candidate_batch.scores
+        return np.array(candidate_batch.indices)
