@@ -45,6 +45,7 @@ class PDS(torchdata.Dataset):
         self._new_targets = None
         self._target_transform = target_transform
         self._original_labels = False
+        self.label_history = []
 
     def __getitem__(self, idx):
         (img_raw, target), idx, mark = self.dataset[idx]
@@ -96,6 +97,8 @@ class PDS(torchdata.Dataset):
 
     def override_targets(self, new_targets: torch.Tensor):
         assert new_targets.size(0) == len(self.dataset)
+        # new_targets = [N x C]
+        self.label_history.append(new_targets)
         self._new_targets = new_targets
 
     @property
@@ -260,6 +263,7 @@ class PLMixupTrainer:
         self._alpha = alpha
         self._lr_patience = lr_patience
         self._log_dir = log_dir
+        self.soft_label_history = None
 
     def _instantiate_optimiser(self):
         return getattr(
@@ -412,6 +416,10 @@ class PLMixupTrainer:
         pbar.attach(trainer)
         trainer.run(fds_loader, max_epochs=epochs[1])
         es.reload_best()
+        soft_label_history = pool.label_history
+        if trainer.state.epoch != trainer.state.max_epochs:
+            soft_label_history = soft_label_history[:-pat2]
+        self.soft_label_history = torch.stack(soft_label_history, dim=0)
         return history
 
     def evaluate(self, data_loader: torchdata.DataLoader) -> dict:
