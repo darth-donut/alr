@@ -96,6 +96,7 @@ class PDS(torchdata.Dataset):
             yield self
 
     def override_targets(self, new_targets: torch.Tensor):
+        'PLEASE FOR THE LOVE OF GOD PASS A CLONE OF new_targets :)'
         assert new_targets.size(0) == len(self.dataset)
         # new_targets = [N x C]
         self.label_history.append(new_targets)
@@ -478,7 +479,7 @@ class PLUpdater:
             self._pseudo_labels[idx[pld_mask]] = new_pld
 
     def _on_epoch_end(self, engine: Engine):
-        self._pool.override_targets(self._pseudo_labels)
+        self._pool.override_targets(self._pseudo_labels.clone())
 
         if self._log_dir is not None:
             # original pool labels w/o augmentation and metadata from PDS
