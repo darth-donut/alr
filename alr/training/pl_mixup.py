@@ -461,6 +461,7 @@ class PLUpdater:
         self._pool = pool
         self._log_dir = log_dir
         self._device = device
+        self._debug_mask = torch.zeros(len(pool), dtype=torch.bool)
 
     def attach(self, engine: Engine):
         engine.add_event_handler(Events.ITERATION_COMPLETED, self._on_iteration_end)
@@ -476,9 +477,19 @@ class PLUpdater:
             pld_img = img_raw[pld_mask]
             # get *softmax* predictions -- exponentiate the output!
             new_pld = self._model(pld_img).exp().detach().cpu()
-            self._pseudo_labels[idx[pld_mask]] = new_pld
+            mask = idx[pld_mask]
+            self._pseudo_labels[mask] = new_pld
+            self._debug_mask[mask] = 1
 
     def _on_epoch_end(self, engine: Engine):
+        # sanity check!
+        # assert that all unlabelled data has been pseudo-labeled in this epoch
+        assert self._debug_mask.all()
+        # reset mask
+        self._debug_mask = torch.zeros(
+            self._pseudo_labels.size(0), dtype=torch.bool
+        )
+
         self._pool.override_targets(self._pseudo_labels.clone())
 
         if self._log_dir is not None:
