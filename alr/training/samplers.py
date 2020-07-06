@@ -7,6 +7,10 @@ from typing import Optional, Union
 from itertools import chain
 
 
+def _safe_ceil(num, denom):
+    return (num // denom) + ((num % denom) != 0)
+
+
 class EpochExtender(torchdata.Sampler):
     def __init__(self, dataset: torchdata.Dataset, by: int):
         super().__init__(dataset)
@@ -94,7 +98,9 @@ class MinLabelledSampler(torchdata.BatchSampler):
         self.sampler = None
 
     def __len__(self):
-        return round(len(self._pseudo_labelled) / self._unlabelled_batch_size + .5)
+        # return round(len(self._pseudo_labelled) / self._unlabelled_batch_size + .5)
+        # equivalent to the above, but safe from floating point rounding errors
+        return _safe_ceil(len(self._pseudo_labelled), self._unlabelled_batch_size)
 
     def __iter__(self):
         num_unlabelled = self._batch_size - self._min_labelled

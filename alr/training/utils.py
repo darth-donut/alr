@@ -80,7 +80,18 @@ class PLPredictionSaver:
     def __init__(self,
                  log_dir: str,
                  compact: Optional[bool] = True,
-                 pred_transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = lambda x: x.exp()):
+                 pred_transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = lambda x: x.exp(),
+                 onehot_target: Optional[bool] = False):
+        r"""
+
+        Args:
+            log_dir (): duh
+            compact (): save what you need (compact) instead of saving all predictions (huge files)
+            pred_transform (): typically used to exponentiate model's output predictions
+            onehot_target (): set to True if the target label is a distribution (i.e.
+                argmax should be called on it to get the class); leave as false if targets are
+                ints.
+        """
         self._output_transform = lambda x: x
         self._preds = []
         self._targets = []
@@ -90,6 +101,7 @@ class PLPredictionSaver:
         self._other_engine = None
         self._compact = compact
         self._pred_transform = pred_transform
+        self._onehot_target = onehot_target
 
     def attach(self,
                engine: Engine,
@@ -103,7 +115,10 @@ class PLPredictionSaver:
     def _parse(self, engine: Engine):
         pred, target = self._output_transform(engine.state.output)
         self._preds.append(pred.detach().cpu())
-        self._targets.append(target.detach().cpu())
+        if self._onehot_target:
+            self._targets.append(target.detach().cpu().argmax(dim=-1))
+        else:
+            self._targets.append(target.detach().cpu())
 
     def _flush(self, _):
         preds_N_C = self._pred_transform(torch.cat(self._preds, dim=0)).numpy()
