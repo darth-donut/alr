@@ -126,11 +126,13 @@ class PLPredictionSaver:
         targets_N = torch.cat(self._targets, dim=0).numpy()
         assert targets_N.ndim == 1 and targets_N.shape[0] == preds_N_C.shape[0]
         if self._compact:
+            acc = _accuracy(preds_N_C, targets_N)
             payload = {
                 'ece': _expected_calibration_error(preds_N_C, targets_N),
                 'conf-thresh': _confidence_threshold(preds_N_C),
                 'entropy': _entropy(preds_N_C),
-                'accuracy': _accuracy(preds_N_C, targets_N),
+                'accuracy': acc.mean(),
+                'per-instance-accuracy': acc,
             }
         else:
             payload = {
@@ -167,7 +169,7 @@ def _entropy(preds_N_C: np.ndarray):
 
 
 def _accuracy(preds_N_C, targets_N):
-    return np.equal(preds_N_C.argmax(axis=-1), targets_N).mean()
+    return np.equal(preds_N_C.argmax(axis=-1), targets_N)
 
 
 def _expected_calibration_error(preds_N_C: np.ndarray, targets_N: np.ndarray):
