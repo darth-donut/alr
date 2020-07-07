@@ -60,14 +60,20 @@ def reliability_plot(
 
 
 def reliability_hist_plot(bins_E_M, counts_E_N, axis, cmap: Optional[str] = 'viridis',
-                          xticklabels=True, title="Confidence histogram"):
+                          xticklabels=True, title="Confidence histogram", bar=False):
     cmap = cm.get_cmap(cmap)
     E = bins_E_M.shape[0]
     for idx, (x, y) in enumerate(zip(bins_E_M, counts_E_N)):
-        axis.scatter(
-            jitter(list(range(len(x) - 1))), y / y.sum(),
-            label=f'epoch {idx + 1}', color=cmap(idx / E),
-        )
+        if bar:
+            axis.bar(
+                list(range(len(x) - 1)), y / y.sum(),
+                label=f'epoch {idx + 1}', color=cmap(idx / E),
+            )
+        else:
+            axis.scatter(
+                jitter(list(range(len(x) - 1))), y / y.sum(),
+                label=f'epoch {idx + 1}', color=cmap(idx / E),
+            )
     bins = bins_E_M[0]
     axis.set_xticklabels(
         [f"({bins[idx]:.1f},{b:.1f}]" for idx, b in enumerate(bins[1:])],
@@ -177,6 +183,7 @@ def parse_calib_dir(calib_metrics: str):
     confidences, proportions, accuracies = [], [], []
     bins, bin_accuracy, counts, ece = [], [], [], []
     entropy = []
+    per_acc = []
     for b in buffer:
         res = b['conf-thresh']
         confidences.append(res[0])
@@ -193,6 +200,8 @@ def parse_calib_dir(calib_metrics: str):
 
         entropy.append(b['entropy'])
 
+        per_acc.append(b['per-instance-accuracy'])
+
     confidences_E_N = np.stack(confidences, axis=0)
     proportions_E_N = np.stack(proportions, axis=0)
     accuracies_E = np.stack(accuracies, axis=0)
@@ -203,17 +212,19 @@ def parse_calib_dir(calib_metrics: str):
     try:
         # can only do so if entropy is a non-jagged matrix (non-pool set calib)
         entropy_E_N = np.stack(entropy, axis=0)
+        per_acc_E_N = np.stack(per_acc, axis=0)
     except:
         entropy_E_N = None
+        per_acc_E_N = None
     return confidences_E_N, proportions_E_N, accuracies_E, \
-           bins_E_M, bin_accuracy_E_N, counts_E_N, ece_E, entropy_E_N
+           bins_E_M, bin_accuracy_E_N, counts_E_N, ece_E, entropy_E_N, per_acc_E_N
 
 
 def diagnostics(calib_metrics: str, metrics: str):
     metrics = Path(metrics)
     confidences_E_N, proportions_E_N, accuracies_E, \
         bins_E_M, bin_accuracy_E_N, counts_E_N, ece_E,\
-        entropy_E_N = parse_calib_dir(calib_metrics)
+        entropy_E_N, _ = parse_calib_dir(calib_metrics)
     with open(metrics, "rb") as fp:
         metrics = pickle.load(fp)
 
@@ -239,7 +250,7 @@ def diagnostics(calib_metrics: str, metrics: str):
 def solo_reliability_plot(calib_metrics, label='Iteration'):
     confidences_E_N, proportions_E_N, accuracies_E, \
     bins_E_M, bin_accuracy_E_N, counts_E_N, ece_E, \
-    entropy_E_N = parse_calib_dir(calib_metrics)
+    entropy_E_N, _ = parse_calib_dir(calib_metrics)
 
     fig = plt.figure(constrained_layout=True, figsize=(8, 8))
     spec = fig.add_gridspec(ncols=2, nrows=2, width_ratios=[29, 1], height_ratios=[2, 7], )
@@ -249,3 +260,57 @@ def solo_reliability_plot(calib_metrics, label='Iteration'):
     norm = mpl.colors.Normalize(vmin=1, vmax=accuracies_E.shape[0])
     fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cm.get_cmap('viridis')),
                  orientation='vertical', label=label, cax=axes[2])
+
+
+def entropy_reliability_plot(calib_metrics):
+    *_, entropy_E_N, per_acc_E_N = parse_calib_dir(calib_metrics)
+    E = entropy_E_N.shape[0]
+
+    space = np.linspace(0, max(map(max, entropy_E_N)), 11)
+
+    fig = plt.figure(constrained_layout=True, figsize=(8, 8))
+    if E > 1:
+        spec = fig.add_gridspec(ncols=2, nrows=2, width_ratios=[29, 1], height_ratios=[2, 7], )
+        axes = [fig.add_subplot(spec[0, 0]), fig.add_subplot(spec[1, 0]), fig.add_subplot(spec[:, -1])]
+    else:
+        spec = fig.add_gridspec(ncols=1, nrows=2, height_ratios=[2, 7])
+        axes = [fig.add_subplot(spec[0, 0]), fig.add_subplot(spec[1, 0])]
+
+    for ent, acc in zip(entropy_E_N, per_acc_E_N):
+        y = []
+        x = []
+        p = []
+        for i, upper in enumerate(space[1:]):
+            lower = space[i]
+            mask = (ent > lower) & (ent <= upper)
+            mean_acc = acc[mask].mean()
+            prop = mask.mean()
+            y.append(mean_acc)
+            # (lower, upper]
+            x.append(f"({lower:.2f}, {upper:.2f}]")
+            p.append(prop)
+        if E == 1:
+            axes[1].bar(
+                range(len(y)), y
+            )
+            axes[0].bar(
+                range(len(p)), p
+            )
+        else:
+            raise NotImplementedError
+        axes[1].set_xticklabels(
+            x, rotation=45, ha='right'
+        )
+        axes[1].set_xticks(
+            range(len(y))
+        )
+    axes[0].set_xticks(())
+    axes[0].set_xticklabels(())
+    axes[0].set_title("Reliability plot")
+    axes[0].set_ylabel("Proportion")
+    axes[1].set_ylabel("Accuracy")
+    axes[1].set_xlabel("Entropy")
+
+    # norm = mpl.colors.Normalize(vmin=1, vmax=accuracies_E.shape[0])
+    # fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cm.get_cmap('viridis')),
+    #              orientation='vertical', label=label, cax=axes[2])
