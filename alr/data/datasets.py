@@ -96,6 +96,7 @@ class Dataset(Enum):
             test = tv.datasets.MNIST(**test_params)
             train = torchdata.ConcatDataset([train] * 3)
         elif self is Dataset.CINIC10:
+            from alr.data._cinic_indices import _cinic_test_indices, _cinic_train_indices
             if raw:
                 train_transform = None
             cinic_root = Path().home() / "data" / "cinic-10"
@@ -112,6 +113,8 @@ class Dataset(Enum):
                 transform=test_transform,
             )
             train = torchdata.ConcatDataset((train, valid))
+            train = torchdata.Subset(train, _cinic_train_indices)
+            test = torchdata.Subset(test, _cinic_test_indices)
         else:
             raise ValueError(f"{self} dataset hasn't been implemented.")
         return train, test
