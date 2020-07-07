@@ -8,6 +8,7 @@ from torch.nn.utils import weight_norm
 from enum import Enum
 from typing import Optional, Tuple
 from torchvision import transforms
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -42,10 +43,12 @@ class Dataset(Enum):
     CIFAR10 = "CIFAR10"
     CIFAR100 = "CIFAR100"
     RepeatedMNIST = "RepeatedMNIST"
+    CINIC10 = "CINIC10"
 
     def get(self,
             root: Optional[str] = 'data',
-            raw: Optional[bool] = False) -> Tuple[torchdata.Dataset, torchdata.Dataset]:
+            raw: Optional[bool] = False,
+            augmentation: Optional[bool] = False) -> Tuple[torchdata.Dataset, torchdata.Dataset]:
         r"""
         Return (train, test) tuple of datasets.
 
@@ -53,15 +56,26 @@ class Dataset(Enum):
             root (str, optional): root path where data will be read from or downloaded to
             raw (bool, optional): if `True`, then training set will not be transformed (i.e.
                 no normalisation, ToTensor, etc.); note, the test set *WILL* be transformed.
+            augmentation (bool, optional): whether to add standard augmentation: horizontal flips and
+                random cropping.
 
         Returns:
             tuple: a 2-tuple of (train, test) datasets
         """
-        train_transform = transforms.Compose([
+        assert not raw or not augmentation, "Cannot enable augmentation on raw dataset!"
+
+        regular_transform = [
             transforms.ToTensor(),
             transforms.Normalize(*self.normalisation_params)
-        ])
-        test_transform = train_transform
+        ]
+        test_transform = transforms.Compose(regular_transform)
+        standard_augmentation = [
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+        ]
+        if augmentation:
+            regular_transform = standard_augmentation + regular_transform
+        train_transform = transforms.Compose(regular_transform)
         if raw:
             train_params = dict(root=root, train=True, download=True)
         else:
@@ -81,6 +95,23 @@ class Dataset(Enum):
             train = tv.datasets.MNIST(**train_params)
             test = tv.datasets.MNIST(**test_params)
             train = torchdata.ConcatDataset([train] * 3)
+        elif self is Dataset.CINIC10:
+            if raw:
+                train_transform = None
+            cinic_root = Path().home() / "data" / "cinic-10"
+            train = tv.datasets.ImageFolder(
+                str(cinic_root / 'train'),
+                transform=train_transform,
+            )
+            valid = tv.datasets.ImageFolder(
+                str(cinic_root / 'valid'),
+                transform=train_transform,
+            )
+            test = tv.datasets.ImageFolder(
+                str(cinic_root / 'test'),
+                transform=test_transform,
+            )
+            train = torchdata.ConcatDataset((train, valid))
         else:
             raise ValueError(f"{self} dataset hasn't been implemented.")
         return train, test
@@ -103,6 +134,8 @@ class Dataset(Enum):
                               (0.2023, 0.1994, 0.2010)),
             Dataset.CIFAR100: ((0.50707516, 0.48654887, 0.44091784),
                                (0.26733429, 0.25643846, 0.27615047)),
+            Dataset.CINIC10: ((0.47889522, 0.47227842, 0.43047404),
+                              (0.24205776, 0.23828046, 0.25874835)),
         }
         params[Dataset.RepeatedMNIST] = params[Dataset.MNIST]
         return params[self]
@@ -127,6 +160,7 @@ class Dataset(Enum):
             Dataset.EMNISTMerge: DataDescription(47, 28, 28, 1),
             Dataset.CIFAR10: DataDescription(10, 32, 32, 3),
             Dataset.CIFAR100: DataDescription(100, 32, 32, 3),
+            Dataset.CINIC10: DataDescription(10, 32, 32, 3),
         }
         return params[self]
 
@@ -164,7 +198,7 @@ class Dataset(Enum):
     @property
     def get_augmentation(self):
         if self is not Dataset.CIFAR10:
-            raise NotImplementedError(f"get_raw not available for {self}")
+            raise NotImplementedError(f"get_augmentation not available for {self}")
         data_augmentation = tv.transforms.Compose([
             tv.transforms.Pad(2, padding_mode='reflect'),
             tv.transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
