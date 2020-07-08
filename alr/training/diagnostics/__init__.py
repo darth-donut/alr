@@ -247,7 +247,7 @@ def diagnostics(calib_metrics: str, metrics: str):
     fig.tight_layout()
 
 
-def solo_reliability_plot(calib_metrics, label='Iteration'):
+def solo_reliability_plot(calib_metrics, title="Reliability plot", label='Iteration'):
     confidences_E_N, proportions_E_N, accuracies_E, \
     bins_E_M, bin_accuracy_E_N, counts_E_N, ece_E, \
     entropy_E_N, _ = parse_calib_dir(calib_metrics)
@@ -255,18 +255,19 @@ def solo_reliability_plot(calib_metrics, label='Iteration'):
     fig = plt.figure(constrained_layout=True, figsize=(8, 8))
     spec = fig.add_gridspec(ncols=2, nrows=2, width_ratios=[29, 1], height_ratios=[2, 7], )
     axes = [fig.add_subplot(spec[0, 0]), fig.add_subplot(spec[1, 0]), fig.add_subplot(spec[:, -1])]
-    reliability_hist_plot(bins_E_M, counts_E_N, axes[0], xticklabels=False, title="Reliability plot")
+    reliability_hist_plot(bins_E_M, counts_E_N, axes[0], xticklabels=False, title=title)
     reliability_plot(bins_E_M, bin_accuracy_E_N, counts_E_N, axes[1], title=None)
     norm = mpl.colors.Normalize(vmin=1, vmax=accuracies_E.shape[0])
     fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cm.get_cmap('viridis')),
                  orientation='vertical', label=label, cax=axes[2])
 
 
-def entropy_reliability_plot(calib_metrics):
+def entropy_reliability_plot(calib_metrics, num_class=10):
     *_, entropy_E_N, per_acc_E_N = parse_calib_dir(calib_metrics)
     E = entropy_E_N.shape[0]
 
-    space = np.linspace(0, max(map(max, entropy_E_N)), 11)
+    max_ent = -np.log(1 / num_class)
+    space = np.linspace(0, max_ent, 11)
 
     fig = plt.figure(constrained_layout=True, figsize=(8, 8))
     if E > 1:
