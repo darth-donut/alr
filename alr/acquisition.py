@@ -47,6 +47,7 @@ class BALD(AcquisitionFunction):
     def __init__(self, pred_fn: _BayesianCallable,
                  subset: Optional[int] = -1,
                  device: _DeviceType = None,
+                 debug: Optional[bool] = False,
                  **data_loader_params):
         r"""
         Implements `BALD <https://arxiv.org/abs/1112.5745>`_.
@@ -81,6 +82,8 @@ class BALD(AcquisitionFunction):
         :type subset: int, optional
         :param device: Move data to specified device when passing input data into `pred_fn`.
         :type device: `None`, `str`, `torch.device`
+        :param debug: Save additional information to recent_score (requires more space).
+        :type debug: `bool`, optional
         :param data_loader_params: params to be passed into `DataLoader` when
                                    iterating over `X_pool`.
 
@@ -94,6 +97,7 @@ class BALD(AcquisitionFunction):
         self._dl_params = data_loader_params
         # store recent scores
         self.recent_score = None
+        self._debug = debug
         assert not self._dl_params.get('shuffle', False)
 
     def __call__(self, X_pool: torchdata.Dataset, b: int) -> np.array:
@@ -120,7 +124,18 @@ class BALD(AcquisitionFunction):
             assert torch.isfinite(I).all()
             assert I.shape == (pool_size,)
             result = torch.argsort(I, descending=True).numpy()
-            self.recent_score = I.numpy()
+            if self._debug:
+                confidence, argmax = mean_mc_preds.max(dim=1)
+                confidence, argmax = confidence.cpu().numpy(), argmax.cpu().numpy()
+                self.recent_score = {
+                    'average_entropy': -E.cpu().numpy(),
+                    'predictive_entropy': H.cpu().numpy(),
+                    'bald_score': I.numpy(),
+                    'confidence': confidence,
+                    'class': argmax,
+                }
+            else:
+                self.recent_score = I.numpy()
             return idxs[result[:b]]
 
 
