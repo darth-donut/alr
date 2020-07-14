@@ -200,7 +200,8 @@ def parse_calib_dir(calib_metrics: str):
 
         entropy.append(b['entropy'])
 
-        per_acc.append(b['per-instance-accuracy'])
+        if 'per-instance-accuracy' in b:
+            per_acc.append(b['per-instance-accuracy'])
 
     confidences_E_N = np.stack(confidences, axis=0)
     proportions_E_N = np.stack(proportions, axis=0)
@@ -212,7 +213,10 @@ def parse_calib_dir(calib_metrics: str):
     try:
         # can only do so if entropy is a non-jagged matrix (non-pool set calib)
         entropy_E_N = np.stack(entropy, axis=0)
-        per_acc_E_N = np.stack(per_acc, axis=0)
+        if per_acc:
+            per_acc_E_N = np.stack(per_acc, axis=0)
+        else:
+            per_acc_E_N = None
     except:
         entropy_E_N = None
         per_acc_E_N = None
