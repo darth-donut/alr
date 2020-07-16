@@ -3,13 +3,13 @@ import numpy as np
 import os
 import random
 
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Union
+from pathlib import Path
 
 from alr.utils.time_utils import Elapsed, timeop, time_this, Time
 from alr.utils.experiment_helpers import stratified_partition, eval_fwd, eval_fwd_exp
 from alr.utils._type_aliases import _DeviceType
 from alr.utils.progress_bar import progress_bar, range_progress_bar
-
 
 __all__ = [
     'Elapsed', 'timeop', 'time_this', 'Time',
@@ -51,3 +51,11 @@ def _map_device(xs: Sequence[torch.Tensor], device: _DeviceType):
     if device is not None:
         return [x.to(device) for x in xs]
     return xs
+
+
+def savefig(filename, fig=None, pad_inches=0.05):
+    """Get rid of them pesky padding"""
+    import matplotlib.pyplot as plt
+    if not fig:
+        fig = plt.gcf()
+    fig.savefig(filename, pad_inches=pad_inches, bbox_inches='tight')
