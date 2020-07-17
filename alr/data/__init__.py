@@ -6,6 +6,7 @@ import torch.utils.data as torchdata
 from alr.acquisition import AcquisitionFunction
 from contextlib import contextmanager
 import numpy as np
+import torchvision as tv
 
 
 class UnlabelledDataset(torchdata.Dataset):
@@ -320,3 +321,23 @@ class RelabelDataset(torchdata.Dataset):
     def __getitem__(self, idx):
         return self._dataset[idx][0], self._labels[idx]
 
+
+class TransformedDataset(torchdata.Dataset):
+    def __init__(self,
+                 raw_dataset: torchdata.Dataset,
+                 transform: Optional[list] = None,
+                 augmentation: Optional[list] = None):
+        self.raw_dataset = raw_dataset
+        self.transform = tv.transforms.Compose(transform) if transform else lambda x: x
+        self.augmentation = tv.transforms.Compose(augmentation) if augmentation else lambda x: x
+
+    def __len__(self):
+        return len(self.raw_dataset)
+
+    def __getitem__(self, idx):
+        item = self.raw_dataset[idx]
+        if isinstance(item, (list, tuple)):
+            x, y = item
+            return self.transform(self.augmentation(x)), y
+        else:
+            return self.transform(self.augmentation(item))
