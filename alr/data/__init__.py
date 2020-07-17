@@ -2,6 +2,7 @@ from typing import Callable, Sequence, Optional, Tuple
 
 import torch
 import torch.utils.data as torchdata
+import copy
 
 from alr.acquisition import AcquisitionFunction
 from contextlib import contextmanager
@@ -341,3 +342,26 @@ class TransformedDataset(torchdata.Dataset):
             return self.transform(self.augmentation(x)), y
         else:
             return self.transform(self.augmentation(item))
+
+
+def disable_augmentation(dataset: UnlabelledDataset):
+    r"""
+    When using :class:`UnlabelledDataset` and :class:`TransformedDataset`, this function
+    can be used in :meth:`UnlabelledDataset.acquire`'s transform argument to disable augmentation
+    before scoring with an acquisition function (without modifying `dataset`).
+
+    Args:
+        dataset (UnlabelledDataset): unlabelled dataset to transform. Assumes `dataset._dataset` is
+            of type :class:`TransformedDataset`.
+
+    Returns:
+        UnlabelledDataset: a new transformed unlabelled dataset that has no augmentation,
+            leaving the original unlabelled dataset (`dataset`) untouched.
+    """
+    expected_len = len(dataset)
+    ds = dataset._dataset.raw_dataset
+    new_dataset = copy.copy(dataset)
+    new_dataset._dataset = TransformedDataset(ds.raw_dataset, transform=ds.transform, augmentation=None)
+    assert len(new_dataset) == expected_len
+    return new_dataset
+
