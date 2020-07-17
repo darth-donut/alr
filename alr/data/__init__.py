@@ -329,6 +329,8 @@ class TransformedDataset(torchdata.Dataset):
                  transform: Optional[list] = None,
                  augmentation: Optional[list] = None):
         self.raw_dataset = raw_dataset
+        self._transforms = transform
+        self._augmentations = augmentation
         self.transform = tv.transforms.Compose(transform) if transform else lambda x: x
         self.augmentation = tv.transforms.Compose(augmentation) if augmentation else lambda x: x
 
@@ -359,9 +361,10 @@ def disable_augmentation(dataset: UnlabelledDataset):
             leaving the original unlabelled dataset (`dataset`) untouched.
     """
     expected_len = len(dataset)
-    ds = dataset._dataset.raw_dataset
+    ds = dataset._dataset
+    assert isinstance(ds, TransformedDataset)
     new_dataset = copy.copy(dataset)
-    new_dataset._dataset = TransformedDataset(ds.raw_dataset, transform=ds.transform, augmentation=None)
+    new_dataset._dataset = TransformedDataset(ds.raw_dataset, transform=ds._transforms, augmentation=None)
     assert len(new_dataset) == expected_len
     return new_dataset
 
