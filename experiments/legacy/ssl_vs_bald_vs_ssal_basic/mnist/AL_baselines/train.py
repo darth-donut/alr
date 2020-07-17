@@ -1,8 +1,6 @@
 r"""
 some baseline comparisons for this experiment: BALD b = 10, b = 1, and RA b = 10
 """
-
-
 from alr.utils import manual_seed, eval_fwd_exp, timeop
 from alr.data.datasets import Dataset
 from alr.data import DataManager, UnlabelledDataset

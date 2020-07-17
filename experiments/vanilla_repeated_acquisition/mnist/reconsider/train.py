@@ -146,3 +146,4 @@ def main(use_al, b, threshold, log_every):
 if __name__ == '__main__':
     main(use_al=True, b=10, threshold=0.9, log_every=2)
     main(use_al=False, b=10, threshold=0.9, log_every=2)
+
