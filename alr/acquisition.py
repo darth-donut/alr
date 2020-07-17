@@ -13,6 +13,13 @@ from alr.utils._type_aliases import _DeviceType
 _BayesianCallable = Callable[[torch.Tensor], torch.Tensor]
 
 
+def _xlogy(x, y):
+    res = x * torch.log(y)
+    res[y == 0] = .0
+    assert torch.isfinite(res).all()
+    return res
+
+
 class AcquisitionFunction(ABC):
     """
     A base class for all acquisition functions. All subclasses should
@@ -118,8 +125,8 @@ class BALD(AcquisitionFunction):
             mc_preds = mc_preds.double()
             assert mc_preds.size()[1] == pool_size
             mean_mc_preds = mc_preds.mean(dim=0)
-            H = -(mean_mc_preds * torch.log(mean_mc_preds + 1e-5)).sum(dim=1)
-            E = (mc_preds * torch.log(mc_preds + 1e-5)).sum(dim=2).mean(dim=0)
+            H = -(_xlogy(mean_mc_preds, mean_mc_preds)).sum(dim=1)
+            E = (_xlogy(mc_preds, mc_preds)).sum(dim=2).mean(dim=0)
             I = (H + E).cpu()
             assert torch.isfinite(I).all()
             assert I.shape == (pool_size,)
@@ -348,8 +355,8 @@ def _bald_score(pred_fn, dataloader, device):
         )
         mc_preds = mc_preds.double()
         mean_mc_preds = mc_preds.mean(dim=0)
-        H = -(mean_mc_preds * torch.log(mean_mc_preds + 1e-5)).sum(dim=1)
-        E = (mc_preds * torch.log(mc_preds + 1e-5)).sum(dim=2).mean(dim=0)
+        H = -(_xlogy(mean_mc_preds, mean_mc_preds)).sum(dim=1)
+        E = (_xlogy(mc_preds, mc_preds)).sum(dim=2).mean(dim=0)
         I = (H + E).cpu()
         assert torch.isfinite(I).all()
         return I.numpy()
