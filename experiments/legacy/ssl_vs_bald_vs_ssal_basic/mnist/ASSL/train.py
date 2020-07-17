@@ -136,3 +136,4 @@ if __name__ == '__main__':
     main("bald", b=10, iters=24, log_every=2)
     main("random", b=10, iters=24, log_every=2)
     main("bald", b=1, iters=240, log_every=20)
+

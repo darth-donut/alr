@@ -147,7 +147,7 @@ def main(b, threshold, warm_start_iters, log_every):
             print(f"=== Iteration {i} of {ITERS} ({i / ITERS:.2%}) ===")
             print(f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
                   f"pool: {dm.n_unlabelled}; test: {len(test)}")
-            # model.reset_weights()   # leverage p.l. from before, DON'T reset!
+            model.reset_weights()   # leverage p.l. from before, DON'T reset!
             trainer = Trainer(
                 model, F.nll_loss, optimiser='Adam',
                 patience=3, reload_best=True, device=device
@@ -172,3 +172,4 @@ def main(b, threshold, warm_start_iters, log_every):
 
 if __name__ == '__main__':
     main(b=10, threshold=0.9, warm_start_iters=10, log_every=2)
+
