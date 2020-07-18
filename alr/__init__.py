@@ -16,7 +16,7 @@ from torch import nn
 
 
 from alr.acquisition import AcquisitionFunction
-from alr.modules.dropout import replace_dropout
+from alr.modules.dropout import replace_dropout, replace_consistent_dropout
 from alr.utils import range_progress_bar, progress_bar
 from alr.utils._type_aliases import _DeviceType
 
@@ -251,7 +251,8 @@ class MCDropout(ALRModel):
                  reduce: Optional[str] = 'logsumexp',
                  inplace: Optional[bool] = True,
                  output_transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
-                 fast: Optional[bool] = False):
+                 fast: Optional[bool] = False,
+                 consistent: Optional[bool] = False):
         r"""
         A wrapper that turns a regular PyTorch module into one that implements
         `Monte Carlo Dropout <https://arxiv.org/abs/1506.02142>`_ (Gal & Ghahramani, 2016).
@@ -271,16 +272,19 @@ class MCDropout(ALRModel):
                                         replaced. If `False`, `model` is not modified and a new model is cloned.
             output_transform (callable, optional): model's output is given as input and the output of this
                                                     callable is expected to return (log) probabilities.
-            fast (bool): if true, :meth:`stochastic_forward` will stack the batch dimension for faster
+            fast (bool, optional): if true, :meth:`stochastic_forward` will stack the batch dimension for faster
                           MC dropout passes. If false, then forward passes are called in a for-loop. Note,
                           the former will consume (`forward`) more memory.
-
+            consistent (bool, optional): if true, the dropout layers will be replaced with consistent variants.
         Attributes:
               base_model (`nn.Module`): provided base model (a clone if `inplace=True`)
               n_forward (int): number of forward passes (`forward`)
         """
         super(MCDropout, self).__init__()
-        self.base_model = replace_dropout(model, inplace=inplace)
+        if consistent:
+            self.base_model = replace_consistent_dropout(model, inplace=inplace)
+        else:
+            self.base_model = replace_dropout(model, inplace=inplace)
         self.n_forward = forward
         self._output_transform = output_transform if output_transform is not None else lambda x: x
         self._reduce = reduce.lower()

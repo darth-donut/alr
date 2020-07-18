@@ -166,6 +166,25 @@ class PersistentFeatureAlphaDropout(_DropoutNd):
         return F.feature_alpha_dropout(input, self.p, True)
 
 
+def _replace_dropout(parent, prefix):
+    for name, mod in parent.named_children():
+        if isinstance(mod, _DropoutNd):
+            kwargs = dict(p=mod.p)
+            if prefix.lower() == 'persistent':
+                kwargs['inplace'] = mod.inplace
+            try:
+                # replace dropout module with one that always does dropout regardless of the model's mode
+                parent.add_module(
+                    name,
+                    getattr(
+                        sys.modules[__name__], prefix + type(mod).__name__
+                    )(**kwargs)
+                )
+            except AttributeError:
+                raise NotImplementedError(f"{type(mod).__name__} hasn't been implemented yet.")
+        _replace_dropout(mod, prefix)
+
+
 def replace_dropout(module: torch.nn.Module,
                     inplace: Optional[bool] = True) -> torch.nn.Module:
     r"""
@@ -180,21 +199,9 @@ def replace_dropout(module: torch.nn.Module,
     Returns:
         `torch.nn.Module`: Same `module` instance if `inplace` is `False`, else a brand new module.
     """
-    def _replace_dropout(parent):
-        for name, mod in parent.named_children():
-            if isinstance(mod, _DropoutNd):
-                try:
-                    # replace dropout module with one that always does dropout regardless of the model's mode
-                    parent.add_module(name,
-                                      getattr(sys.modules[__name__],
-                                              'Persistent' + type(mod).__name__)(p=mod.p, inplace=mod.inplace))
-                except AttributeError:
-                    raise NotImplementedError(f"{type(mod).__name__} hasn't been implemented yet.")
-            _replace_dropout(mod)
-
     if not inplace:
         module = copy.deepcopy(module)
-    _replace_dropout(module)
+    _replace_dropout(module, prefix='Persistent')
     _inspect_forward(module)
     return module
 
@@ -205,3 +212,122 @@ def _inspect_forward(module: torch.nn.Module):
     if re.search(r".*dropout(\dd)?\(.*\).*", src):
         warnings.warn("Found usage of non-module dropout in module's forward function."
                       " Please make sure that the training flag is set to True during eval mode too.", UserWarning)
+
+
+# Both consistent dropout implementations were taken from ElementAI's baal repository with minor modifications.
+# see their licence here: https://github.com/ElementAI/baal/blob/master/LICENSE
+class ConsistentDropout(_DropoutNd):
+    """
+    ConsistentDropout is useful when doing research.
+    It guarantees that while the masks are the same between batches
+    during inference. The masks are different inside the batch.
+    This is slower than using regular Dropout, but it is useful
+    when you want to use the same set of weights for each sample used in inference.
+    From BatchBALD (Kirsch et al, 2019), this is necessary to use BatchBALD and remove noise
+    from the prediction.
+    Args:
+        p (float): probability of an element to be zeroed. Default: 0.5
+    Notes:
+        For optimal results, you should use a batch size of one
+        during inference time.
+        Furthermore, to guarantee that each sample uses the same
+        set of weights,
+        you must use `replicate_in_memory=True` in ModelWrapper,
+        which is the default.
+    """
+
+    def __init__(self, p=0.5):
+        super().__init__(p=p, inplace=False)
+        self.reset()
+
+    def forward(self, x):
+        if self.training:
+            return F.dropout(x, self.p, training=True, inplace=False)
+        else:
+            if self._mask is None or self._mask.shape != x.shape:
+                self._mask = self._make_mask(x)
+            return torch.mul(x, self._mask)
+
+    def _make_mask(self, x):
+        return F.dropout(torch.ones_like(x, device=x.device), self.p, training=True)
+
+    def reset(self):
+        self._mask = None
+
+    def eval(self):
+        self.reset()
+        return super().eval()
+
+    def train(self, mode=True):
+        super().train(mode)
+        if not mode:
+            self.reset()
+
+
+class ConsistentDropout2d(_DropoutNd):
+    """
+    ConsistentDropout is useful when doing research.
+    It guarantees that while the mask are the same between batches,
+    they are different inside the batch.
+    This is slower than using regular Dropout, but it is useful
+    when you want to use the same set of weights for each unlabelled sample.
+    Args:
+        p (float): probability of an element to be zeroed. Default: 0.5
+    Notes:
+        For optimal results, you should use a batch size of one
+        during inference time.
+        Furthermore, to guarantee that each sample uses the same
+        set of weights,
+        you must use `replicate_in_memory=True` in ModelWrapper,
+        which is the default.
+    """
+
+    def __init__(self, p=0.5):
+        super().__init__(p=p, inplace=False)
+        self.reset()
+
+    def forward(self, x):
+        if self.training:
+            return F.dropout2d(x, self.p, training=True, inplace=False)
+        else:
+            if self._mask is None or self._mask.shape != x.shape:
+                self._mask = self._make_mask(x)
+            return torch.mul(x, self._mask)
+
+    def _make_mask(self, x):
+        return F.dropout2d(torch.ones_like(x, device=x.device), self.p, training=True)
+
+    def reset(self):
+        self._mask = None
+
+    def eval(self):
+        self.reset()
+        return super().eval()
+
+    def train(self, mode=True):
+        super().train(mode)
+        if not mode:
+            self.reset()
+
+
+def replace_consistent_dropout(module: torch.nn.Module,
+                               inplace: Optional[bool] = True) -> torch.nn.Module:
+    r"""
+    Recursively replaces dropout modules in `module` such that dropout is performed
+    regardless of the model's mode *and uses the same mask across batches*.
+    The mask is refreshed each time `model.eval()` is invoked but the mask is guaranteed
+    to be consistent across all batch (different masks for each item *within* the batch).
+
+    Args:
+        module (`torch.nn.Module`): PyTorch module object
+        inplace (bool, optional): If `True`, the `model` is modified *in-place*. If `False`, `model` is not modified and a new model is cloned.
+
+    Returns:
+        `torch.nn.Module`: Same `module` instance if `inplace` is `False`, else a brand new module.
+    """
+    if not inplace:
+        module = copy.deepcopy(module)
+    _replace_dropout(module, prefix='Consistent')
+    _inspect_forward(module)
+    return module
+
