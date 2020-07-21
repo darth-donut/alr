@@ -209,10 +209,9 @@ class PLMixupEnsembleTrainer:
                   f"mean val acc = {np.mean([h[-1] for h in history['val_acc']]):.4f}; "
                   f"pseudo-label acc = {plab_acc:.4f}")
 
-        soft_label_history = pool.label_history
-        if current_epoch != epochs[1]:
-            soft_label_history = soft_label_history[:-pat2]
-        self.soft_label_history = torch.stack(soft_label_history, dim=0)
+        # the last element in pool.label_history is the most accurate one to-date:
+        #  all the individual models have (converged and) reloaded their weights
+        self.soft_label_history = torch.stack(pool.label_history, dim=0)
         return history
 
     def _override_pool_labels(self, pool, pool_loader):
@@ -223,6 +222,7 @@ class PLMixupEnsembleTrainer:
                 with torch.no_grad():
                     for x, _ in pool_loader:
                         x = x.to(self._device)
+                        # NOTE: ensemble's forward call returns softmax probabilities
                         pseudo_labels.append(ensemble(x).detach().cpu())
         pool.override_targets(torch.cat(pseudo_labels))
         return pool.override_accuracy
@@ -250,8 +250,6 @@ class PerformanceTracker:
         self.patience = self._original_patience
 
     def step(self, acc):
-        if self.last_acc is not None and acc <= self.last_acc:
-            self.patience -= 1
         if self.last_acc is None or acc > self.last_acc:
             self.reset()
             if self._model_filename.exists():
@@ -259,6 +257,8 @@ class PerformanceTracker:
                 self._model_filename.unlink()
             torch.save(self.model.state_dict(), str(self._model_filename))
             self.last_acc = acc
+        else:
+            self.patience -= 1
 
     @property
     def done(self) -> bool:
