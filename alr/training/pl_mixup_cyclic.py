@@ -164,7 +164,6 @@ class CyclicPLMixupTrainer(PLMixupTrainer):
         trainer.run(fds_loader, max_epochs=epochs[1])
 
         ####
-        pbar = ProgressBar(desc=lambda _: "Stage 3")
         # reset SGD learning rate to 0.2 and start cyclic learning
         init_lr = 0.2
         optimiser = torch.optim.SGD(self._model.parameters(), lr=init_lr, momentum=0.9, weight_decay=1e-4)
@@ -176,7 +175,7 @@ class CyclicPLMixupTrainer(PLMixupTrainer):
         # total number of training iterations for all B epochs:
         #  len(fds_loader) = number of iterations need for ONE epoch
         T = len(fds_loader) * B
-        pbar.log_message("Starting cyclic learning")
+        print("Starting cyclic learning")
         trainer = create_plmixup_trainer(
             self._model, optimiser,
             pool, alpha=self._alpha,
@@ -189,9 +188,9 @@ class CyclicPLMixupTrainer(PLMixupTrainer):
         def _log2(e: Engine):
             metrics = val_eval.run(val_loader).metrics
             acc, loss = metrics['acc'], metrics['loss']
-            pbar.log_message(f"\tEpoch {e.state.epoch}/{e.state.max_epochs} "
-                             f"[val] acc, loss = "
-                             f"{acc:.4f}, {loss:.4f}")
+            print(f"\tEpoch {e.state.epoch}/{e.state.max_epochs} "
+                  f"[val] acc, loss = "
+                  f"{acc:.4f}, {loss:.4f}")
             history['val_acc'].append(acc)
             history['val_loss'].append(loss)
             history['override_acc'].append(pool.override_accuracy)
