@@ -13,7 +13,7 @@ from alr.training.pl_mixup import IndexMarker, PDS, onehot_transform, create_war
     PLMixupTrainer
 from alr.training.progress_bar.ignite_progress_bar import ProgressBar
 from alr.training.samplers import RandomFixedLengthSampler, MinLabelledSampler
-from alr.training.utils import EarlyStopper
+from alr.training.utils import EarlyStopper, PerformanceTracker
 
 
 class CyclicPLMixupTrainer(PLMixupTrainer):
@@ -162,8 +162,15 @@ class CyclicPLMixupTrainer(PLMixupTrainer):
 
         pbar.attach(trainer)
         trainer.run(fds_loader, max_epochs=epochs[1])
+        es.reload_best()
 
         ####
+        # save the best weight so far just in case we wander off
+        pt = PerformanceTracker(self._model, patience=0)
+        # es.reload_best() would've given us this accuracy, so we store it now
+        # before restarting the SGD learning rate in case we never recover from moving away from this local minima
+        pt.step(max(history['val_acc']))
+
         # reset SGD learning rate to 0.2 and start cyclic learning
         init_lr = 0.2
         optimiser = torch.optim.SGD(self._model.parameters(), lr=init_lr, momentum=0.9, weight_decay=1e-4)
@@ -194,6 +201,7 @@ class CyclicPLMixupTrainer(PLMixupTrainer):
             history['val_acc'].append(acc)
             history['val_loss'].append(loss)
             history['override_acc'].append(pool.override_accuracy)
+            pt.step(acc)
 
         @trainer.on(Events.ITERATION_COMPLETED)
         def _anneal(e: Engine):
@@ -203,7 +211,10 @@ class CyclicPLMixupTrainer(PLMixupTrainer):
                 param_group['lr'] = cyclic_annealer(iteration, T, M, init_lr)
 
         trainer.run(fds_loader, max_epochs=B)
-        es.reload_best()
+        # always want the best set of weights:
+        #  if the cyclic learning scheduler ended up with better weights, use it, otherwise,
+        #  revert to the set of weights before starting cyclic learning
+        pt.reload_best()
         soft_label_history = pool.label_history
         self.soft_label_history = torch.stack(soft_label_history, dim=0)
         return history

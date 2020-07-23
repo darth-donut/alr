@@ -199,3 +199,43 @@ def _expected_calibration_error(preds_N_C: np.ndarray, targets_N: np.ndarray):
     assert np.isfinite(res).all()
 
     return bins, acc, counts, conf, np.sum(res) / N
+
+
+class PerformanceTracker:
+    def __init__(self, model: nn.Module, patience: int):
+        self.model = model
+        self.patience = patience
+        self._original_patience = patience
+        self.last_acc = None
+        self._temp_dir = tempfile.TemporaryDirectory()
+        self._model_filename = Path(str(self._temp_dir.name)).absolute() / f"{id(self)}.pt"
+        self._reloaded = False
+
+    def reset(self):
+        self.patience = self._original_patience
+
+    def step(self, acc):
+        if self.last_acc is None or acc > self.last_acc:
+            self.reset()
+            if self._model_filename.exists():
+                # 2 am paranoia: make sure old model weight is overridden
+                self._model_filename.unlink()
+            torch.save(self.model.state_dict(), str(self._model_filename))
+            self.last_acc = acc
+        else:
+            self.patience -= 1
+
+    @property
+    def done(self) -> bool:
+        return self.patience <= 0
+
+    @property
+    def reloaded(self) -> bool:
+        return self._reloaded
+
+    def reload_best(self):
+        if self.last_acc is None:
+            raise RuntimeError("Cannot reload model until step is called at least once.")
+        self.model.load_state_dict(torch.load(self._model_filename), strict=True)
+        self._temp_dir.cleanup()
+        self._reloaded = True
