@@ -265,6 +265,7 @@ class PLMixupTrainer:
         self._lr_patience = lr_patience
         self._log_dir = log_dir
         self.soft_label_history = None
+        self.soft_augmented_label_history = None
 
     def _instantiate_optimiser(self):
         return getattr(
@@ -401,6 +402,7 @@ class PLMixupTrainer:
         es.attach(val_eval)
 
         pbar = ProgressBar(desc=lambda _: "Stage 2")
+        soft_augmented_label_history = []
 
         @trainer.on(Events.EPOCH_COMPLETED)
         def _log(e: Engine):
@@ -413,6 +415,15 @@ class PLMixupTrainer:
             history['val_loss'].append(loss)
             history['override_acc'].append(pool.override_accuracy)
             scheduler.step(acc)
+            with pool.no_fluff():
+                pseudo_labels = []
+                with torch.no_grad():
+                    self._model.eval()
+                    for x, _ in pool_loader:
+                        x = x.to(self._device)
+                        # add (softmax) probability, hence .exp()
+                        pseudo_labels.append(self._model(x).exp().detach().cpu())
+            soft_augmented_label_history.append(torch.cat(pseudo_labels))
 
         pbar.attach(trainer)
         trainer.run(fds_loader, max_epochs=epochs[1])
@@ -420,7 +431,9 @@ class PLMixupTrainer:
         soft_label_history = pool.label_history
         if trainer.state.epoch != trainer.state.max_epochs:
             soft_label_history = soft_label_history[:-pat2]
+            soft_augmented_label_history = soft_augmented_label_history[:-pat2]
         self.soft_label_history = torch.stack(soft_label_history, dim=0)
+        self.soft_augmented_label_history = torch.stack(soft_augmented_label_history, dim=0)
         return history
 
     def evaluate(self, data_loader: torchdata.DataLoader) -> dict:
