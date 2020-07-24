@@ -190,6 +190,12 @@ class CyclicPLMixupTrainer(PLMixupTrainer):
             log_dir=self._log_dir,
             device=self._device
         )
+        val_eval = create_supervised_evaluator(
+            self._model, metrics={
+                'acc': Accuracy(),
+                'loss': Loss(F.nll_loss)
+            }, device=self._device
+        )
 
         @trainer.on(Events.EPOCH_COMPLETED)
         def _log2(e: Engine):
