@@ -1,4 +1,4 @@
-name: ml5
+name: ml4
 channels:
   - pytorch
   - defaults
@@ -73,4 +73,4 @@ dependencies:
     - tqdm==4.46.0
     - torchcontrib==0.0.2
     - batchbald_redux==1.0.1
-    - git+https://github.com/jiahfong/alr@2d3c712
+    - git+https://github.com/jiahfong/alr@bcead70

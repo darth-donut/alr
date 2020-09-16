@@ -5,7 +5,10 @@
 
 #SBATCH --output=slurm-%j.out
 #SBATCH --error=slurm-%j.err
+
 #SBATCH --job-name="pre-acq"
+#SBATCH --array=0-5%2
+
 export TMPDIR=/scratch-ssd/${USER}/tmp
 mkdir -p $TMPDIR
 
@@ -14,15 +17,21 @@ export CONDA_PKGS_DIRS=/scratch-ssd/$USER/conda_pkgs
 
 /scratch-ssd/oatml/scripts/run_locked.sh /scratch-ssd/oatml/miniconda3/bin/conda-env update -f environment.yml
 
-source /scratch-ssd/oatml/miniconda3/bin/activate ml5
+source /scratch-ssd/oatml/miniconda3/bin/activate ml4
+
+SEED=(42 24 1008 96 2020 7)
+SAVE=("--save" "" "" "" "" "")
 
 START=$(date +%s.%N)
 srun python train.py \
     --acq "bald" \
-    --alpha 0.1 \
+    --alpha 0.4 \
     --b 10 \
-    --iters 99 \
-    --reps 1
+    --augment \
+    --iters 149 \
+    --reps 1 \
+    --seed ${SEED[$SLURM_ARRAY_TASK_ID]} ${SAVE[$SLURM_ARRAY_TASK_ID]}
+
 END=$(date +%s.%N)
 DIFF=$(echo "$END - $START" | bc)
 echo "run time: $DIFF secs"

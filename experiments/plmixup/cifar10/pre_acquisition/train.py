@@ -1,10 +1,10 @@
-from alr.training.pl_mixup import PLMixupTrainer, temp_ds_transform
-from alr.utils import manual_seed, eval_fwd_exp, timeop
+from alr.training.pl_mixup import temp_ds_transform
+from alr.training.plmixup_ensemble import PLMixupEnsembleTrainer, Ensemble
+from alr.utils import manual_seed, timeop
 from alr.data.datasets import Dataset
 from alr.data import DataManager, UnlabelledDataset
-from alr.acquisition import BALD, RandomAcquisition, _bald_score
+from alr.acquisition import BALD, RandomAcquisition
 from alr.training.utils import PLPredictionSaver
-from alr import MCDropout
 
 import torch
 import pickle
@@ -30,8 +30,11 @@ def main(acq_name: str,
          b: int,
          augment: bool,
          iters: int,
-         repeats: int):
-    manual_seed(42)
+         repeats: int,
+         save_weights: bool,
+         seed: int):
+    manual_seed(seed)
+    print(f"Starting experiment with seed {seed}, augment = {augment}, save weights = {save_weights}")
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     kwargs = dict(num_workers=4, pin_memory=True)
 
@@ -64,14 +67,13 @@ def main(acq_name: str,
             *Dataset.CIFAR10.normalisation_params
         ),
     ])
-    ds_transformer = temp_ds_transform(test_transform)
     if augment:
         data_augmentation = Dataset.CIFAR10.get_augmentation
     else:
         data_augmentation = None
     accs = defaultdict(list)
 
-    template = f"{acq_name}_{b}_alpha_{alpha}" + ("_aug" if augment else "")
+    template = f"{acq_name}_{b}_alpha_{alpha}_{seed}" + ("_aug" if augment else "")
     metrics = Path("metrics") / template
     calib_metrics = Path("calib_metrics") / template
     saved_models = Path("saved_models") / template
@@ -84,23 +86,15 @@ def main(acq_name: str,
     with open(metrics / "pool_idxs.pkl", "wb") as fp:
         pickle.dump(pool._dataset.indices, fp)
 
+    dm = DataManager(train, pool, None)
+
     for r in range(1, REPEATS + 1):
         print(f"- [{acq_name} (b={b})] repeat #{r} of {REPEATS}-")
-        model = MCDropout(Dataset.CIFAR10.model, forward=20, fast=False).to(device)
-        if acq_name == "bald":
-            acq_fn = BALD(eval_fwd_exp(model), device=device, batch_size=512, **kwargs)
-        elif acq_name == "random":
-            acq_fn = RandomAcquisition()
-        else:
-            raise Exception("Done goofed.")
-
-        dm = DataManager(train, pool, acq_fn)
         dm.reset()  # this resets pool
-
         for i in range(1, ITERS + 1):
-            model.reset_weights()
-            trainer = PLMixupTrainer(
-                model, 'SGD', train_transform, test_transform,
+            models = [Dataset.CIFAR10.model.to(device) for _ in range(5)]
+            trainer = PLMixupEnsembleTrainer(
+                models, 'SGD', train_transform, test_transform,
                 {'lr': .1, 'momentum': .9, 'weight_decay': 1e-4},
                 kwargs, log_dir=None,
                 rfls_length=MIN_TRAIN_LENGTH, alpha=alpha,
@@ -125,7 +119,7 @@ def main(acq_name: str,
             accs[dm.n_labelled].append(test_metrics['acc'])
 
             # save stuff
-
+            ensemble = Ensemble(models)
             # pool calib
             with dm.unlabelled.tmp_debug():
                 pool_loader = torchdata.DataLoader(
@@ -134,11 +128,11 @@ def main(acq_name: str,
                     **kwargs,
                 )
                 calc_calib_metrics(
-                    pool_loader, model, calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
+                    pool_loader, ensemble, calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
                     device=device
                 )
             calc_calib_metrics(
-                test_loader, model, calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
+                test_loader, ensemble, calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
                 device=device
             )
 
@@ -152,36 +146,27 @@ def main(acq_name: str,
 
                 }
                 pickle.dump(payload, fp)
-            torch.save(model.state_dict(), saved_models / f"rep_{r}_iter_{i}.pt")
+                
+            if save_weights:
+                ensemble.save_weights(str(saved_models / f"rep_{r}_iter_{i}"))
+                
             # flush results frequently for the impatient
             with open(template + "_accs.pkl", "wb") as fp:
                 pickle.dump(accs, fp)
 
             # finally, acquire points
+            if acq_name == "bald":
+                acq_fn = BALD(ensemble.get_preds, device=device, batch_size=512, **kwargs)
+            elif acq_name == "random":
+                acq_fn = RandomAcquisition()
+            else:
+                raise Exception("Done goofed.")
+            dm._a_fn = acq_fn
             # transform pool samples toTensor and normalise them (since we used raw above!)
-            acquired_idxs, acquired_ds = dm.acquire(b=b, transform=ds_transformer)
-            acquired_ds = ds_transformer(acquired_ds)
-            # if bald, store ALL bald scores and the acquired idx so we can map the top b scores
-            # to the b acquired_idxs
+            acquired_idxs, _ = dm.acquire(b=b, transform=temp_ds_transform(test_transform))
             if acq_name == "bald":
                 # acquired_idxs has the top b scores from recent_score
                 bald_scores = (acquired_idxs, acq_fn.recent_score)
-            # if RA, then store the acquired indices and their associated bald scores
-            else:
-                # compute bald scores of Random Acq. points
-                bald_scores = _bald_score(
-                    pred_fn=eval_fwd_exp(model),
-                    dataloader=torchdata.DataLoader(
-                        acquired_ds, batch_size=512,
-                        shuffle=False,  # don't shuffle to get 1-1 pairing with acquired_idxs
-                        **kwargs,
-                    ),
-                    device=device,
-                )
-                assert acquired_idxs.shape[0] == bald_scores.shape[0], \
-                    f"Acquired idx length {acquired_idxs.shape[0]} does not" \
-                    f" match bald scores length {bald_scores.shape[0]}"
-                bald_scores = list(zip(acquired_idxs, bald_scores))
 
 
 if __name__ == '__main__':
@@ -194,6 +179,8 @@ if __name__ == '__main__':
     args.add_argument("--augment", action='store_true')
     args.add_argument("--iters", default=199, type=int)
     args.add_argument("--reps", default=1, type=int)
+    args.add_argument("--seed", type=int)
+    args.add_argument("--save", action='store_true', help='store model weights')
     args = args.parse_args()
 
     main(
@@ -202,5 +189,8 @@ if __name__ == '__main__':
         b=args.b,
         augment=args.augment,
         iters=args.iters,
-        repeats=args.reps
+        repeats=args.reps,
+        save_weights=args.save,
+        seed=args.seed,
     )
+
