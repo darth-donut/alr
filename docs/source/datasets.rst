@@ -31,6 +31,26 @@ Classses
     
 
 
+:hidden:`MNISTNet`
+~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: MNISTNet
+    :members:
+    :undoc-members:
+    :show-inheritance:
+    
+
+
+:hidden:`CIFAR10Net`
+~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: CIFAR10Net
+    :members:
+    :undoc-members:
+    :show-inheritance:
+    
+
+
 
 Functions
 ---------

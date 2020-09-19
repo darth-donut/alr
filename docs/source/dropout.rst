@@ -61,6 +61,26 @@ Classses
     
 
 
+:hidden:`ConsistentDropout`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: ConsistentDropout
+    :members:
+    :undoc-members:
+    :show-inheritance:
+    
+
+
+:hidden:`ConsistentDropout2d`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: ConsistentDropout2d
+    :members:
+    :undoc-members:
+    :show-inheritance:
+    
+
+
 
 Functions
 ---------
@@ -70,5 +90,11 @@ Functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: replace_dropout
+
+
+:hidden:`replace_consistent_dropout`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: replace_consistent_dropout
 
 

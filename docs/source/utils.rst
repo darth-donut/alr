@@ -1,65 +1,48 @@
 .. role:: hidden
     :class: hidden-section
 
-alr.utils
-=========
+alr.training.utils
+==================
 
-.. automodule:: alr.utils
-.. currentmodule:: alr.utils
+.. automodule:: alr.training.utils
+.. currentmodule:: alr.training.utils
 
 Classses
 ---------
 
 
-:hidden:`Time`
-~~~~~~~~~~~~~~~~~~~~~
+:hidden:`EarlyStopper`
+~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: Time
+.. autoclass:: EarlyStopper
     :members:
     :undoc-members:
     :show-inheritance:
+    
 
 
-:hidden:`Elapsed`
-~~~~~~~~~~~~~~~~~~~~~
+:hidden:`PLPredictionSaver`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: Elapsed
+.. autoclass:: PLPredictionSaver
     :members:
     :undoc-members:
     :show-inheritance:
+    
+
+
+:hidden:`PerformanceTracker`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: PerformanceTracker
+    :members:
+    :undoc-members:
+    :show-inheritance:
+    
+
 
 
 Functions
 ---------
 
 
-:hidden:`manual_seed`
-~~~~~~~~~~~~~~~~~~~~~
-
-.. autofunction:: manual_seed
-
-
-:hidden:`eval_fwd_exp`
-~~~~~~~~~~~~~~~~~~~~~~
-
-.. autofunction:: eval_fwd_exp
-
-
-:hidden:`eval_fwd`
-~~~~~~~~~~~~~~~~~~~
-
-.. autofunction:: eval_fwd
-
-
-
-:hidden:`timeop`
-~~~~~~~~~~~~~~~~~~~~~
-
-.. autofunction:: timeop
-
-
-
-:hidden:`time_this`
-~~~~~~~~~~~~~~~~~~~~~
-
-.. autofunction:: time_this

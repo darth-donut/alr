@@ -31,8 +31,44 @@ Classses
     
 
 
+:hidden:`PseudoLabelDataset`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: PseudoLabelDataset
+    :members:
+    :undoc-members:
+    :show-inheritance:
+    
+
+
+:hidden:`RelabelDataset`
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: RelabelDataset
+    :members:
+    :undoc-members:
+    :show-inheritance:
+    
+
+
+:hidden:`TransformedDataset`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: TransformedDataset
+    :members:
+    :undoc-members:
+    :show-inheritance:
+    
+
+
 
 Functions
 ---------
+
+
+:hidden:`disable_augmentation`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: disable_augmentation
 
 

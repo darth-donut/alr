@@ -51,6 +51,16 @@ Classses
     :special-members: __call__
 
 
+:hidden:`BatchBALD`
+~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: BatchBALD
+    :members:
+    :undoc-members:
+    :show-inheritance:
+    :special-members: __call__
+
+
 
 Functions
 ---------
