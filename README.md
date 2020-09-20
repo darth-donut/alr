@@ -19,6 +19,7 @@ from alr.acquisition import BALD
 from alr.data import DataManager, UnlabelledDataset
 from alr.data.datasets import Dataset
 from alr.training import Trainer
+from alr.training.samplers import RandomFixedLengthSampler
 from alr.utils import manual_seed, eval_fwd_exp, timeop
 
 # reproducibility
@@ -62,7 +63,9 @@ for i in range(1, ITERS + 1):
         patience=3, reload_best=True, device=device
     )
     train_loader = torchdata.DataLoader(
-        dm.labelled, batch_size=BATCH_SIZE, **kwargs
+        dm.labelled, batch_size=BATCH_SIZE,
+        sampler=RandomFixedLengthSampler(dm.labelled, 12_500, shuffle=True),
+        **kwargs
     )
     with timeop() as t:
         history = trainer.fit(train_loader, val_loader, epochs=EPOCHS)
@@ -78,6 +81,12 @@ for i in range(1, ITERS + 1):
 
 print(accs)
 ```
+
+From the plot below, we observe that by acquiring high
+BALD-scoring points (instead of randomly acquiring points), we achieve higher accuracy with
+fewer acquisitions:
+
+![](images/mnist.png)
 
 # Todo
 
