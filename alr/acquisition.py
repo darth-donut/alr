@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.distributions as dist
 import torch.utils.data as torchdata
-from batchbald_redux.batchbald import get_batchbald_batch
+
 
 from alr.utils._type_aliases import _DeviceType
 
@@ -377,6 +377,7 @@ class BatchBALD(AcquisitionFunction):
         assert not self._dl_params.get('shuffle', False)
 
     def __call__(self, X_pool: torchdata.Dataset, b: int) -> np.array:
+        from batchbald_redux.batchbald import get_batchbald_batch
         dl = torchdata.DataLoader(X_pool, **self._dl_params)
         with torch.no_grad():
             mc_preds_K_N_C: torch.Tensor = torch.cat(
