@@ -81,5 +81,5 @@ print(accs)
 
 # Todo
 
-[ ] Add example of SSL + AL
-[ ] Generate Sphinx doc
+* [ ] Add example of SSL + AL
+* [ ] Generate Sphinx doc
