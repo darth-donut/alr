@@ -86,7 +86,9 @@ From the plot below, we observe that by acquiring high
 BALD-scoring points (instead of randomly acquiring points), we achieve higher accuracy with
 fewer acquisitions:
 
-![](images/mnist.png)
+<p align="center">
+<img src="images/mnist.png" width="50%" height="50%">
+</p>
 
 # Todo
 
