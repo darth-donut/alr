@@ -15,7 +15,7 @@ Python API
    :maxdepth: 1
    :caption: Examples
 
-   Quick-start <experiments/quickstart.ipynb>
+   Quickstart <experiments/alr_quickstart.ipynb>
 
 .. toctree::
    :maxdepth: 1

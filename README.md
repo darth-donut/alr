@@ -1,11 +1,23 @@
-# alr: Active Learning Research Library
+# alr: Active Learning Research Library (WIP)
 
-A library for your daily active learning needs (WIP). This library also offers semi-supervised learning trainers
-and acquisition functions that complement these learning algorithms.
+`alr` is a general-purpose active learning library. It provides a simple interface
+to integrate supervised and semi-supervised training with active learning.
 
-# Example
+Read the documentation [here](https://alr.readthedocs.io/en/latest/).
 
-## BALD-10 on MNIST
+## Install
+
+Install this library as a pip package. Clone this repository and enter the following line in your shell:
+
+
+```bash
+pip install -e .
+```
+
+
+## Example
+
+### MNIST
 
 Here's an example of greedily-acquiring top BALD-scoring points on the MNIST dataset:
 
@@ -93,4 +105,4 @@ fewer acquisitions:
 # Todo
 
 * [ ] Add example of SSL + AL
-* [ ] Generate Sphinx doc
+* [ ] Generate complete Sphinx doc
