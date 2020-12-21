@@ -18,10 +18,9 @@ import torch
 import numpy as np
 from torch.nn import functional as F
 
+
 def calc_calib_metric(loader, model, device, log_dir):
-    save_pl_metrics = create_supervised_evaluator(
-        model, metrics=None, device=device
-    )
+    save_pl_metrics = create_supervised_evaluator(model, metrics=None, device=device)
     pps = PLPredictionSaver(
         log_dir=log_dir,
     )
@@ -29,8 +28,7 @@ def calc_calib_metric(loader, model, device, log_dir):
     save_pl_metrics.run(loader)
 
 
-def uneven_split(dataset: torchdata.Dataset,
-                 mapping: dict) -> tuple:
+def uneven_split(dataset: torchdata.Dataset, mapping: dict) -> tuple:
     count = {k: v for k, v in mapping.items()}
     original_idxs = set(range(len(dataset)))
     idxs = []
@@ -41,16 +39,14 @@ def uneven_split(dataset: torchdata.Dataset,
         if count[y]:
             count[y] -= 1
             idxs.append(idx)
-    return torchdata.Subset(
-        dataset, idxs
-    ), torchdata.Subset(
+    return torchdata.Subset(dataset, idxs), torchdata.Subset(
         dataset, list(original_idxs - set(idxs))
     )
 
 
 def main(threshold: float, b: int, seed: int):
     print(f"Starting experiment with seed {seed}")
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     BATCH_SIZE = 64
@@ -110,52 +106,72 @@ def main(threshold: float, b: int, seed: int):
             # make pool return targets too. (i.e. debug mode)
             with dm.unlabelled.tmp_debug():
                 trainer = EphemeralTrainer(
-                    model, dm.unlabelled, F.nll_loss, 'Adam', threshold=threshold,
+                    model,
+                    dm.unlabelled,
+                    F.nll_loss,
+                    "Adam",
+                    threshold=threshold,
                     min_labelled=0.1,
-                    log_dir=None, patience=(3, 7),
+                    log_dir=None,
+                    patience=(3, 7),
                     reload_best=True,
                     init_pseudo_label_dataset=last_pld,
-                    device=device, pool_loader_kwargs=kwargs
+                    device=device,
+                    pool_loader_kwargs=kwargs,
                 )
                 train_loader = torchdata.DataLoader(
-                    dm.labelled, batch_size=BATCH_SIZE,
-                    sampler=RandomFixedLengthSampler(dm.labelled, MIN_TRAIN_LEN, shuffle=True),
-                    **kwargs
+                    dm.labelled,
+                    batch_size=BATCH_SIZE,
+                    sampler=RandomFixedLengthSampler(
+                        dm.labelled, MIN_TRAIN_LEN, shuffle=True
+                    ),
+                    **kwargs,
                 )
                 with timeop() as t:
                     history = trainer.fit(
-                        train_loader, val_loader,
-                        iterations=SSL_ITERATIONS, epochs=EPOCHS
+                        train_loader,
+                        val_loader,
+                        iterations=SSL_ITERATIONS,
+                        epochs=EPOCHS,
                     )
             last_pld = trainer.last_pseudo_label_dataset
             # eval on test set
             test_metrics = trainer.evaluate(test_loader)
-            accs[dm.n_labelled].append(test_metrics['acc'])
+            accs[dm.n_labelled].append(test_metrics["acc"])
             print(f"-- Iteration {i} of {ITERS} --")
-            print(f"\ttrain: {dm.n_labelled}; pool: {dm.n_unlabelled}\n"
-                  f"\t[test] acc: {test_metrics['acc']}; time: {t}")
+            print(
+                f"\ttrain: {dm.n_labelled}; pool: {dm.n_unlabelled}\n"
+                f"\t[test] acc: {test_metrics['acc']}; time: {t}"
+            )
 
             # save stuff
             with dm.unlabelled.tmp_debug():
                 pool_loader = torchdata.DataLoader(
-                    dm.unlabelled, batch_size=1024,
-                    shuffle=False, **kwargs,
+                    dm.unlabelled,
+                    batch_size=1024,
+                    shuffle=False,
+                    **kwargs,
                 )
                 calc_calib_metric(
-                    pool_loader, model, device,
-                    (calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}")
+                    pool_loader,
+                    model,
+                    device,
+                    (calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}"),
                 )
             calc_calib_metric(
-                test_loader, model, device,
-                (calib_metrics / "test" / f"rep_{r}" / f"iter_{i}")
+                test_loader,
+                model,
+                device,
+                (calib_metrics / "test" / f"rep_{r}" / f"iter_{i}"),
             )
 
             with open(metrics / f"rep_{r}_iter_{i}.pkl", "wb") as fp:
                 payload = {
-                    'history': history, 'test_metrics': test_metrics,
-                    'labelled_classes': dm.unlabelled.labelled_classes,
-                    'labelled_indices': dm.unlabelled.labelled_indices,
-                    'bald_scores': bald_scores,
+                    "history": history,
+                    "test_metrics": test_metrics,
+                    "labelled_classes": dm.unlabelled.labelled_classes,
+                    "labelled_indices": dm.unlabelled.labelled_indices,
+                    "bald_scores": bald_scores,
                 }
                 pickle.dump(payload, fp)
             torch.save(model.state_dict(), saved_models / f"rep_{r}_iter_{i}.pth")
@@ -167,9 +183,10 @@ def main(threshold: float, b: int, seed: int):
                 pickle.dump(accs, fp)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import argparse
+
     args = argparse.ArgumentParser()
     args.add_argument("--seed", type=int)
     args = args.parse_args()
-    main(threshold=.90, b=10, seed=args.seed)
+    main(threshold=0.90, b=10, seed=args.seed)

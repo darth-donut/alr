@@ -24,9 +24,7 @@ from torch import nn
 
 
 def calc_calib_metrics(loader, model: nn.Module, log_dir, device):
-    evaluator = create_supervised_evaluator(
-        model, metrics=None, device=device
-    )
+    evaluator = create_supervised_evaluator(model, metrics=None, device=device)
     pds = PLPredictionSaver(log_dir)
     pds.attach(evaluator)
     evaluator.run(loader)
@@ -34,7 +32,7 @@ def calc_calib_metrics(loader, model: nn.Module, log_dir, device):
 
 def main(model_name, aug, dataset, iters, repeats):
     manual_seed(42)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     # ========= CONSTANTS ===========
@@ -60,10 +58,16 @@ def main(model_name, aug, dataset, iters, repeats):
     pool, val = torchdata.random_split(pool, (len(pool) - VAL_SIZE, VAL_SIZE))
     pool = UnlabelledDataset(pool)
     val_loader = torchdata.DataLoader(
-        val, batch_size=512, shuffle=False, **kwargs,
+        val,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     test_loader = torchdata.DataLoader(
-        test, batch_size=512, shuffle=False, **kwargs,
+        test,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     accs = defaultdict(list)
 
@@ -107,13 +111,20 @@ def main(model_name, aug, dataset, iters, repeats):
         for i in range(1, ITERS + 1):
             model.reset_weights()
             trainer = Trainer(
-                model, F.nll_loss, optimiser='Adam',
-                patience=10, reload_best=True, device=device
+                model,
+                F.nll_loss,
+                optimiser="Adam",
+                patience=10,
+                reload_best=True,
+                device=device,
             )
             train_loader = torchdata.DataLoader(
-                dm.labelled, batch_size=BATCH_SIZE,
-                sampler=RandomFixedLengthSampler(dm.labelled, MIN_TRAIN_LENGTH, shuffle=True),
-                **kwargs
+                dm.labelled,
+                batch_size=BATCH_SIZE,
+                sampler=RandomFixedLengthSampler(
+                    dm.labelled, MIN_TRAIN_LENGTH, shuffle=True
+                ),
+                **kwargs,
             )
             with timeop() as t:
                 history = trainer.fit(train_loader, val_loader, epochs=EPOCHS)
@@ -121,34 +132,42 @@ def main(model_name, aug, dataset, iters, repeats):
             # eval
             test_metrics = trainer.evaluate(test_loader)
             print(f"=== Iteration {i} of {ITERS} ({i / ITERS:.2%}) ===")
-            print(f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
-                  f"pool: {dm.n_unlabelled}; test: {len(test)}")
+            print(
+                f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
+                f"pool: {dm.n_unlabelled}; test: {len(test)}"
+            )
             print(f"\t[test] acc: {test_metrics['acc']:.4f}, time: {t}")
-            accs[dm.n_labelled].append(test_metrics['acc'])
+            accs[dm.n_labelled].append(test_metrics["acc"])
 
             # save stuff
 
             # pool calib
             with dm.unlabelled.tmp_debug():
                 pool_loader = torchdata.DataLoader(
-                    dm.unlabelled, batch_size=512, shuffle=False,
+                    dm.unlabelled,
+                    batch_size=512,
+                    shuffle=False,
                     **kwargs,
                 )
                 calc_calib_metrics(
-                    pool_loader, model, calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
-                    device=device
+                    pool_loader,
+                    model,
+                    calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
+                    device=device,
                 )
             calc_calib_metrics(
-                test_loader, model, calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
-                device=device
+                test_loader,
+                model,
+                calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
+                device=device,
             )
 
             with open(metrics / f"rep_{r}_iter_{i}.pkl", "wb") as fp:
                 payload = {
-                    'history': history,
-                    'test_metrics': test_metrics,
-                    'labelled_classes': dm.unlabelled.labelled_classes,
-                    'labelled_indices': dm.unlabelled.labelled_indices,
+                    "history": history,
+                    "test_metrics": test_metrics,
+                    "labelled_classes": dm.unlabelled.labelled_classes,
+                    "labelled_indices": dm.unlabelled.labelled_indices,
                 }
                 pickle.dump(payload, fp)
             torch.save(model.state_dict(), saved_models / f"rep_{r}_iter_{i}.pt")
@@ -158,14 +177,14 @@ def main(model_name, aug, dataset, iters, repeats):
             dm.acquire(b=200)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import argparse
+
     args = argparse.ArgumentParser()
-    args.add_argument("--model", choices=['vgg', 'wres', 'res', 'pres', '13cnn', 'eff'])
-    args.add_argument("--data", choices=['cinic', 'cifar'])
+    args.add_argument("--model", choices=["vgg", "wres", "res", "pres", "13cnn", "eff"])
+    args.add_argument("--data", choices=["cinic", "cifar"])
     args.add_argument("--iters", default=11, type=int)
     args.add_argument("--reps", default=1, type=int)
-    args.add_argument("--aug", action='store_true')
+    args.add_argument("--aug", action="store_true")
     args = args.parse_args()
     main(args.model, args.aug, args.data, args.iters, args.reps)
-

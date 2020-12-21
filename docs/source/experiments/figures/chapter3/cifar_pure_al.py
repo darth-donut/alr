@@ -13,11 +13,12 @@ from alr.utils import savefig
 
 root = Path("/Users/harry/Documents/workspace/thesis/figures/4/data")
 
+
 def plot(dic, label, colour=None, smooth=None, alpha=False):
     x = list(dic.keys())
     y = list(map(lambda x: np.median(x), dic.values()))
-    top = list(map(lambda x: np.quantile(x, .75), dic.values()))
-    btm = list(map(lambda x: np.quantile(x, .25), dic.values()))
+    top = list(map(lambda x: np.quantile(x, 0.75), dic.values()))
+    btm = list(map(lambda x: np.quantile(x, 0.25), dic.values()))
     if smooth and len(x) > 15:
         x = x[::smooth]
         y = y[::smooth]
@@ -25,13 +26,13 @@ def plot(dic, label, colour=None, smooth=None, alpha=False):
         btm = btm[::smooth]
     if colour is None:
         if alpha:
-            l, = plt.plot(x, y, label=label, alpha=alpha, linestyle='dashed')
+            (l,) = plt.plot(x, y, label=label, alpha=alpha, linestyle="dashed")
         else:
-            l, = plt.plot(x, y, label=label)
-        plt.fill_between(x, top, btm, color=l.get_color(), alpha=.2)
+            (l,) = plt.plot(x, y, label=label)
+        plt.fill_between(x, top, btm, color=l.get_color(), alpha=0.2)
     else:
         plt.plot(x, y, label=label, color=colour)
-        plt.fill_between(x, top, btm, color=colour, alpha=.2)
+        plt.fill_between(x, top, btm, color=colour, alpha=0.2)
 
 
 with open(root / "im_random_50_combined.pkl", "rb") as fp:
@@ -58,4 +59,3 @@ plt.xlabel("Acquired dataset size")
 plt.ylabel("Accuracy")
 plt.title("CIFAR-10 test accuracy")
 savefig("/Users/harry/Documents/workspace/thesis/figures/4/cifar_pure_al.pdf")
-

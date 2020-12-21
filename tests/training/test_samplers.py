@@ -38,6 +38,7 @@ class EvenData(torchdata.Dataset):
     def __getitem__(self, idx):
         return self._arr[idx]
 
+
 def test_random_fixed_length_sampler_target_length():
     ds_len = 10
     ds = Data(ds_len)
@@ -56,7 +57,7 @@ def test_random_fixed_length_sampler_target_length():
 
 
 def test_random_fixed_length_sampler_short_no_shuffle():
-    ds_len = 2**13
+    ds_len = 2 ** 13
     target_length = 2 ** 12
     assert target_length < ds_len
     ds = Data(ds_len)
@@ -79,7 +80,7 @@ def test_random_fixed_length_sampler_short_no_shuffle():
 
 
 def test_random_fixed_length_sampler_short_shuffle():
-    ds_len = 2**13
+    ds_len = 2 ** 13
     target_length = 2 ** 12
     assert target_length < ds_len
     ds = Data(ds_len)
@@ -108,9 +109,7 @@ def test_min_labelled_sampler():
     labelled = OddData(20)
     unlabelled = EvenData(1230)
     min_labelled = 32
-    mls = MinLabelledSampler(
-        labelled, unlabelled, batch_size=64, min_labelled=.5
-    )
+    mls = MinLabelledSampler(labelled, unlabelled, batch_size=64, min_labelled=0.5)
     c = Counter()
     for i in mls:
         indices = np.array(i)

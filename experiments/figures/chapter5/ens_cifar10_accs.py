@@ -7,22 +7,24 @@ import numpy as np
 
 from alr.utils import savefig
 
+
 def plot(dic, label, colour=None, smooth=None):
     x = list(dic.keys())
     y = list(map(lambda x: np.median(x), dic.values()))
-    top = list(map(lambda x: np.quantile(x, .75), dic.values()))
-    btm = list(map(lambda x: np.quantile(x, .25), dic.values()))
+    top = list(map(lambda x: np.quantile(x, 0.75), dic.values()))
+    btm = list(map(lambda x: np.quantile(x, 0.25), dic.values()))
     if smooth and len(x) > 15:
         x = x[::smooth]
         y = y[::smooth]
         top = top[::smooth]
         btm = btm[::smooth]
     if colour is None:
-        l, = plt.plot(x, y, label=label)
-        plt.fill_between(x, top, btm, color=l.get_color(), alpha=.2)
+        (l,) = plt.plot(x, y, label=label)
+        plt.fill_between(x, top, btm, color=l.get_color(), alpha=0.2)
     else:
         plt.plot(x, y, label=label, color=colour)
-        plt.fill_between(x, top, btm, color=colour, alpha=.2)
+        plt.fill_between(x, top, btm, color=colour, alpha=0.2)
+
 
 root = Path("/Users/harry/Documents/workspace/thesis/figures/4/data")
 
@@ -41,7 +43,5 @@ plt.title("Test accuracy")
 plt.ylabel("Accuracy")
 plt.xlabel("Acquired dataset size")
 plt.xlim(1000, 2000)
-plt.ylim(.64)
+plt.ylim(0.64)
 savefig("/Users/harry/Documents/workspace/thesis/figures/4/ens_cifar10_accs.pdf")
-
-

@@ -6,8 +6,12 @@ from typing import Optional, Dict, Callable, Sequence
 import torch
 import torch.utils.data as torchdata
 from ignite.contrib.handlers.param_scheduler import LRScheduler
-from ignite.engine import Engine, Events, \
-    create_supervised_evaluator, create_supervised_trainer
+from ignite.engine import (
+    Engine,
+    Events,
+    create_supervised_evaluator,
+    create_supervised_trainer,
+)
 from ignite.metrics import Loss, Accuracy, RunningAverage
 
 from torch import nn
@@ -28,8 +32,8 @@ from alr.utils._type_aliases import _DeviceType, _Loss_fn
 import torchvision as tv
 import numpy as np
 
-def uneven_split(dataset: torchdata.Dataset,
-                 mapping: dict) -> tuple:
+
+def uneven_split(dataset: torchdata.Dataset, mapping: dict) -> tuple:
     count = {k: v for k, v in mapping.items()}
     original_idxs = set(range(len(dataset)))
     idxs = []
@@ -40,9 +44,7 @@ def uneven_split(dataset: torchdata.Dataset,
         if count[y]:
             count[y] -= 1
             idxs.append(idx)
-    return torchdata.Subset(
-        dataset, idxs
-    ), torchdata.Subset(
+    return torchdata.Subset(dataset, idxs), torchdata.Subset(
         dataset, list(original_idxs - set(idxs))
     )
 
@@ -56,7 +58,11 @@ class Noise(torchdata.Dataset):
         std = 0.15
         n = length - 2
         weak = torch.randn(size=(n // 2, channels, img_shape[0], img_shape[1])) * std
-        strong = torch.randn(size=(n // 2 + (n % 2), channels, img_shape[0], img_shape[1])) * std * 2
+        strong = (
+            torch.randn(size=(n // 2 + (n % 2), channels, img_shape[0], img_shape[1]))
+            * std
+            * 2
+        )
         self.data = torch.cat([weak, strong, black, white])
         assert self.data.shape == (length, channels, *img_shape)
 
@@ -69,7 +75,7 @@ class Noise(torchdata.Dataset):
 
 def xlogy(x, y):
     res = x * torch.log(y)
-    res[y == 0] = .0
+    res[y == 0] = 0.0
     assert torch.isfinite(res).all()
     return res
 
@@ -98,15 +104,16 @@ def get_scores(mc_preds):
     assert E.shape == H.shape == I.shape == confidence.shape
 
     return {
-        'average_entropy': -E,
-        'predictive_entropy': H,
-        'average_entropy2': -E_1,
-        'predictive_entropy2': H_1,
-        'bald_score': I,
-        'bald_score2': I_1,
-        'confidence': confidence,
-        'class': argmax,
+        "average_entropy": -E,
+        "predictive_entropy": H,
+        "average_entropy2": -E_1,
+        "predictive_entropy2": H_1,
+        "bald_score": I,
+        "bald_score2": I_1,
+        "confidence": confidence,
+        "class": argmax,
     }
+
 
 def get_preds(models, loader, device):
     preds = []
@@ -118,6 +125,7 @@ def get_preds(models, loader, device):
                 model_preds.append(m(x.to(device)).exp())
             preds.append(torch.cat(model_preds))
     return torch.stack(preds)
+
 
 def evaluate(preds, loader, device):
     ys = torch.cat([y for _, y in loader]).to(device)
@@ -143,9 +151,7 @@ class TDataset(torchdata.Dataset):
 
 
 def calc_calib_metrics(loader, model: nn.Module, log_dir, device):
-    evaluator = create_supervised_evaluator(
-        model, metrics=None, device=device
-    )
+    evaluator = create_supervised_evaluator(model, metrics=None, device=device)
     pds = PLPredictionSaver(log_dir)
     pds.attach(evaluator)
     evaluator.run(loader)
@@ -153,7 +159,7 @@ def calc_calib_metrics(loader, model: nn.Module, log_dir, device):
 
 def main(model_name, aug, dataset, iters, repeats, result):
     manual_seed(42)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     # ========= CONSTANTS ===========
@@ -189,13 +195,13 @@ def main(model_name, aug, dataset, iters, repeats, result):
         train, test = Dataset.CIFAR10.get(raw=True)
         regular_transform = [
             tv.transforms.ToTensor(),
-            tv.transforms.Normalize(*Dataset.CIFAR10.normalisation_params)
+            tv.transforms.Normalize(*Dataset.CIFAR10.normalisation_params),
         ]
     elif dataset == "cinic":
         train, test = Dataset.CINIC10.get(raw=True)
         regular_transform = [
             tv.transforms.ToTensor(),
-            tv.transforms.Normalize(*Dataset.CINIC10.normalisation_params)
+            tv.transforms.Normalize(*Dataset.CINIC10.normalisation_params),
         ]
     else:
         raise ValueError("dataset only accepts two arguments: cinic or cifar")
@@ -222,21 +228,31 @@ def main(model_name, aug, dataset, iters, repeats, result):
     val = TDataset(val, regular_transform)
 
     val_loader = torchdata.DataLoader(
-        val, batch_size=512, shuffle=False, **kwargs,
+        val,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     test_loader = torchdata.DataLoader(
-        test, batch_size=512, shuffle=False, **kwargs,
+        test,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     accs = defaultdict(list)
     dm = DataManager(train, pool, RandomAcquisition())
 
-    manual_seed(42) # reseed
+    manual_seed(42)  # reseed
     _, cifar_test = Dataset.CIFAR10.get()
-    transform = tv.transforms.Compose([
-        tv.transforms.ToTensor(),
-        tv.transforms.Normalize((0.4377, 0.4438, 0.4728), (0.1980, 0.2010, 0.1970))
-    ])
-    svhn_test = tv.datasets.SVHN("data", split="test", transform=transform, download=True)
+    transform = tv.transforms.Compose(
+        [
+            tv.transforms.ToTensor(),
+            tv.transforms.Normalize((0.4377, 0.4438, 0.4728), (0.1980, 0.2010, 0.1970)),
+        ]
+    )
+    svhn_test = tv.datasets.SVHN(
+        "data", split="test", transform=transform, download=True
+    )
     subset, _ = stratified_partition(svhn_test, classes=10, size=10_000)
 
     with open("subset_idxs.pkl", "wb") as fp:
@@ -245,7 +261,10 @@ def main(model_name, aug, dataset, iters, repeats, result):
     noise = Noise(length=20)
     score_test = torchdata.ConcatDataset((cifar_test, svhn_test, noise))
     score_test_loader = torchdata.DataLoader(
-        score_test, shuffle=False, batch_size=512, **kwargs,
+        score_test,
+        shuffle=False,
+        batch_size=512,
+        **kwargs,
     )
 
     for r in range(1, REPEATS + 1):
@@ -265,13 +284,20 @@ def main(model_name, aug, dataset, iters, repeats, result):
                     #     lr=0.1, weight_decay=1e-4, momentum=0.9,
                     # )
                     trainer = Trainer(
-                        model, F.nll_loss, optimiser='Adam',
-                        patience=10, reload_best=True, device=device,
+                        model,
+                        F.nll_loss,
+                        optimiser="Adam",
+                        patience=10,
+                        reload_best=True,
+                        device=device,
                     )
                     train_loader = torchdata.DataLoader(
-                        dm.labelled, batch_size=BATCH_SIZE,
-                        sampler=RandomFixedLengthSampler(dm.labelled, MIN_TRAIN_LENGTH, shuffle=True),
-                        **kwargs
+                        dm.labelled,
+                        batch_size=BATCH_SIZE,
+                        sampler=RandomFixedLengthSampler(
+                            dm.labelled, MIN_TRAIN_LENGTH, shuffle=True
+                        ),
+                        **kwargs,
                     )
                     trainer.fit(train_loader, val_loader, epochs=EPOCHS)
                     models.append(model)
@@ -280,14 +306,18 @@ def main(model_name, aug, dataset, iters, repeats, result):
             preds = get_preds(models, test_loader, device).mean(dim=0)
             test_acc = evaluate(preds, test_loader, device)
             print(f"=== Iteration {i} of {ITERS} ({i / ITERS:.2%}) ===")
-            print(f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
-                  f"pool: {dm.n_unlabelled}; test: {len(test)}")
+            print(
+                f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
+                f"pool: {dm.n_unlabelled}; test: {len(test)}"
+            )
             print(f"\t[test] acc: {test_acc}")
             accs[dm.n_labelled].append(test_acc)
             with open(template + "_accs.pkl", "wb") as fp:
                 pickle.dump(accs, fp)
             for mi, m in enumerate(models, 1):
-                torch.save(m.state_dict(), saved_models / f"rep_{r}_iter_{i}_model_{mi}.pt")
+                torch.save(
+                    m.state_dict(), saved_models / f"rep_{r}_iter_{i}_model_{mi}.pt"
+                )
 
             preds = get_preds(models, score_test_loader, device)
             scores = get_scores(preds)
@@ -297,13 +327,13 @@ def main(model_name, aug, dataset, iters, repeats, result):
             dm.acquire(b=400)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import argparse
+
     args = argparse.ArgumentParser()
-    args.add_argument("--data", choices=['cinic', 'cifar'])
+    args.add_argument("--data", choices=["cinic", "cifar"])
     args.add_argument("--iters", default=11, type=int)
     args.add_argument("--reps", default=1, type=int)
-    args.add_argument("--aug", action='store_true')
+    args.add_argument("--aug", action="store_true")
     args = args.parse_args()
     main("13cnn", args.aug, args.data, args.iters, args.reps, result="scores/13cnn")
-

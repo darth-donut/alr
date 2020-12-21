@@ -18,8 +18,7 @@ from pathlib import Path
 from torch import nn
 
 
-def uneven_split(dataset: torchdata.Dataset,
-                 mapping: dict) -> tuple:
+def uneven_split(dataset: torchdata.Dataset, mapping: dict) -> tuple:
     count = {k: v for k, v in mapping.items()}
     original_idxs = set(range(len(dataset)))
     idxs = []
@@ -30,17 +29,13 @@ def uneven_split(dataset: torchdata.Dataset,
         if count[y]:
             count[y] -= 1
             idxs.append(idx)
-    return torchdata.Subset(
-        dataset, idxs
-    ), torchdata.Subset(
+    return torchdata.Subset(dataset, idxs), torchdata.Subset(
         dataset, list(original_idxs - set(idxs))
     )
 
 
 def calc_calib_metrics(loader, model: nn.Module, log_dir, device):
-    evaluator = create_supervised_evaluator(
-        model, metrics=None, device=device
-    )
+    evaluator = create_supervised_evaluator(model, metrics=None, device=device)
     pds = PLPredictionSaver(log_dir)
     pds.attach(evaluator)
     evaluator.run(loader)
@@ -49,7 +44,7 @@ def calc_calib_metrics(loader, model: nn.Module, log_dir, device):
 def main(even_bias, b, iters, repeats):
     acq_name = "random"
     manual_seed(42)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     # ========= CONSTANTS ===========
@@ -76,10 +71,16 @@ def main(even_bias, b, iters, repeats):
     pool, val = torchdata.random_split(pool, (len(pool) - VAL_SIZE, VAL_SIZE))
     pool = UnlabelledDataset(pool)
     val_loader = torchdata.DataLoader(
-        val, batch_size=512, shuffle=False, **kwargs,
+        val,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     test_loader = torchdata.DataLoader(
-        test, batch_size=512, shuffle=False, **kwargs,
+        test,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     accs = defaultdict(list)
 
@@ -110,13 +111,20 @@ def main(even_bias, b, iters, repeats):
         for i in range(1, ITERS + 1):
             model.reset_weights()
             trainer = Trainer(
-                model, F.nll_loss, optimiser='Adam',
-                patience=10, reload_best=True, device=device
+                model,
+                F.nll_loss,
+                optimiser="Adam",
+                patience=10,
+                reload_best=True,
+                device=device,
             )
             train_loader = torchdata.DataLoader(
-                dm.labelled, batch_size=BATCH_SIZE,
-                sampler=RandomFixedLengthSampler(dm.labelled, MIN_TRAIN_LENGTH, shuffle=True),
-                **kwargs
+                dm.labelled,
+                batch_size=BATCH_SIZE,
+                sampler=RandomFixedLengthSampler(
+                    dm.labelled, MIN_TRAIN_LENGTH, shuffle=True
+                ),
+                **kwargs,
             )
             with timeop() as t:
                 history = trainer.fit(train_loader, val_loader, epochs=EPOCHS)
@@ -124,35 +132,43 @@ def main(even_bias, b, iters, repeats):
             # eval
             test_metrics = trainer.evaluate(test_loader)
             print(f"=== Iteration {i} of {ITERS} ({i / ITERS:.2%}) ===")
-            print(f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
-                  f"pool: {dm.n_unlabelled}; test: {len(test)}")
+            print(
+                f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
+                f"pool: {dm.n_unlabelled}; test: {len(test)}"
+            )
             print(f"\t[test] acc: {test_metrics['acc']:.4f}, time: {t}")
-            accs[dm.n_labelled].append(test_metrics['acc'])
+            accs[dm.n_labelled].append(test_metrics["acc"])
 
             # save stuff
 
             # pool calib
             with dm.unlabelled.tmp_debug():
                 pool_loader = torchdata.DataLoader(
-                    dm.unlabelled, batch_size=512, shuffle=False,
+                    dm.unlabelled,
+                    batch_size=512,
+                    shuffle=False,
                     **kwargs,
                 )
                 calc_calib_metrics(
-                    pool_loader, model, calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
-                    device=device
+                    pool_loader,
+                    model,
+                    calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
+                    device=device,
                 )
             calc_calib_metrics(
-                test_loader, model, calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
-                device=device
+                test_loader,
+                model,
+                calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
+                device=device,
             )
 
             with open(metrics / f"rep_{r}_iter_{i}.pkl", "wb") as fp:
                 payload = {
-                    'history': history,
-                    'test_metrics': test_metrics,
-                    'labelled_classes': dm.unlabelled.labelled_classes,
-                    'labelled_indices': dm.unlabelled.labelled_indices,
-                    'acquired_idxs': acquired_idxs,
+                    "history": history,
+                    "test_metrics": test_metrics,
+                    "labelled_classes": dm.unlabelled.labelled_classes,
+                    "labelled_indices": dm.unlabelled.labelled_indices,
+                    "acquired_idxs": acquired_idxs,
                 }
                 pickle.dump(payload, fp)
             torch.save(model.state_dict(), saved_models / f"rep_{r}_iter_{i}.pt")
@@ -161,12 +177,13 @@ def main(even_bias, b, iters, repeats):
             with open(template + "_accs.pkl", "wb") as fp:
                 pickle.dump(accs, fp)
 
-            if i == ITERS: continue  # job done
+            if i == ITERS:
+                continue  # job done
             # finally, acquire points
             acquired_idxs, _ = dm.acquire(b=b)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import argparse
 
     args = argparse.ArgumentParser()
@@ -177,4 +194,3 @@ if __name__ == '__main__':
 
     main(even_bias=True, b=args.b, iters=args.iters, repeats=args.reps)
     main(even_bias=False, b=args.b, iters=args.iters, repeats=args.reps)
-

@@ -170,23 +170,26 @@ def _replace_dropout(parent, prefix):
     for name, mod in parent.named_children():
         if isinstance(mod, _DropoutNd):
             kwargs = dict(p=mod.p)
-            if prefix.lower() == 'persistent':
-                kwargs['inplace'] = mod.inplace
+            if prefix.lower() == "persistent":
+                kwargs["inplace"] = mod.inplace
             try:
                 # replace dropout module with one that always does dropout regardless of the model's mode
                 parent.add_module(
                     name,
-                    getattr(
-                        sys.modules[__name__], prefix + type(mod).__name__
-                    )(**kwargs)
+                    getattr(sys.modules[__name__], prefix + type(mod).__name__)(
+                        **kwargs
+                    ),
                 )
             except AttributeError:
-                raise NotImplementedError(f"{type(mod).__name__} hasn't been implemented yet.")
+                raise NotImplementedError(
+                    f"{type(mod).__name__} hasn't been implemented yet."
+                )
         _replace_dropout(mod, prefix)
 
 
-def replace_dropout(module: torch.nn.Module,
-                    inplace: Optional[bool] = True) -> torch.nn.Module:
+def replace_dropout(
+    module: torch.nn.Module, inplace: Optional[bool] = True
+) -> torch.nn.Module:
     r"""
     Recursively replaces dropout modules in `module` such that dropout is performed
     regardless of the model's mode. That is, dropout is performed during training
@@ -201,7 +204,7 @@ def replace_dropout(module: torch.nn.Module,
     """
     if not inplace:
         module = copy.deepcopy(module)
-    _replace_dropout(module, prefix='Persistent')
+    _replace_dropout(module, prefix="Persistent")
     _inspect_forward(module)
     return module
 
@@ -210,8 +213,11 @@ def _inspect_forward(module: torch.nn.Module):
     src = inspect.getsource(module.forward).strip()
     src = re.sub(r"\s", "", src)
     if re.search(r".*dropout(\dd)?\(.*\).*", src):
-        warnings.warn("Found usage of non-module dropout in module's forward function."
-                      " Please make sure that the training flag is set to True during eval mode too.", UserWarning)
+        warnings.warn(
+            "Found usage of non-module dropout in module's forward function."
+            " Please make sure that the training flag is set to True during eval mode too.",
+            UserWarning,
+        )
 
 
 # Both consistent dropout implementations were taken from ElementAI's baal repository with minor modifications.
@@ -310,8 +316,9 @@ class ConsistentDropout2d(_DropoutNd):
             self.reset()
 
 
-def replace_consistent_dropout(module: torch.nn.Module,
-                               inplace: Optional[bool] = True) -> torch.nn.Module:
+def replace_consistent_dropout(
+    module: torch.nn.Module, inplace: Optional[bool] = True
+) -> torch.nn.Module:
     r"""
     Recursively replaces dropout modules in `module` such that dropout is performed
     regardless of the model's mode *and uses the same mask across batches*.
@@ -327,7 +334,6 @@ def replace_consistent_dropout(module: torch.nn.Module,
     """
     if not inplace:
         module = copy.deepcopy(module)
-    _replace_dropout(module, prefix='Consistent')
+    _replace_dropout(module, prefix="Consistent")
     _inspect_forward(module)
     return module
-

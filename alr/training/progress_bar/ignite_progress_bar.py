@@ -22,15 +22,15 @@ class ProgressBar:
     def attach(self, engine: ignite.engine.Engine):
         engine.add_event_handler(ignite.engine.Events.EPOCH_STARTED, self.on_start)
         engine.add_event_handler(ignite.engine.Events.EPOCH_COMPLETED, self.on_complete)
-        engine.add_event_handler(ignite.engine.Events.ITERATION_COMPLETED, self.on_iteration_complete)
+        engine.add_event_handler(
+            ignite.engine.Events.ITERATION_COMPLETED, self.on_iteration_complete
+        )
 
     def on_start(self, engine):
         dataloader = engine.state.dataloader
-        self.progress_bar = create_progress_bar(
-            len(dataloader)
-        )
+        self.progress_bar = create_progress_bar(len(dataloader))
         if self.desc is not None:
-            print(self.desc(engine), file=sys.stderr, end=' ')
+            print(self.desc(engine), file=sys.stderr, end=" ")
         self.progress_bar.start()
 
     def on_complete(self, _):
@@ -40,9 +40,7 @@ class ProgressBar:
         dataloader = engine.state.dataloader
         iters = (engine.state.iteration - 1) % len(dataloader) + 1
         if iters % self.log_interval == 0:
-            self.progress_bar.update(
-                self.log_interval
-            )
+            self.progress_bar.update(self.log_interval)
 
     def log_message(self, msg: str):
         self.progress_bar.log_message(msg)

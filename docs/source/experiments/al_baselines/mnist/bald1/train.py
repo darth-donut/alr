@@ -18,7 +18,7 @@ from pathlib import Path
 
 def main(acq_name, b, iters):
     manual_seed(42, det_cudnn=False)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     # ========= CONSTANTS ===========
@@ -37,13 +37,22 @@ def main(acq_name, b, iters):
     pool, val = torchdata.random_split(pool, (len(pool) - VAL_SIZE, VAL_SIZE))
     pool = UnlabelledDataset(pool)
     pool_loader = torchdata.DataLoader(
-        pool, batch_size=1024, shuffle=False, **kwargs,
+        pool,
+        batch_size=1024,
+        shuffle=False,
+        **kwargs,
     )
     val_loader = torchdata.DataLoader(
-        val, batch_size=1024, shuffle=False, **kwargs,
+        val,
+        batch_size=1024,
+        shuffle=False,
+        **kwargs,
     )
     test_loader = torchdata.DataLoader(
-        test, batch_size=1024, shuffle=False, **kwargs,
+        test,
+        batch_size=1024,
+        shuffle=False,
+        **kwargs,
     )
     accs = defaultdict(list)
 
@@ -69,13 +78,20 @@ def main(acq_name, b, iters):
         for i in range(1, ITERS + 1):
             model.reset_weights()
             trainer = Trainer(
-                model, F.nll_loss, optimiser='Adam',
-                patience=3, reload_best=True, device=device
+                model,
+                F.nll_loss,
+                optimiser="Adam",
+                patience=3,
+                reload_best=True,
+                device=device,
             )
             train_loader = torchdata.DataLoader(
-                dm.labelled, batch_size=BATCH_SIZE,
-                sampler=RandomFixedLengthSampler(dm.labelled, MIN_TRAIN_LENGTH, shuffle=True),
-                **kwargs
+                dm.labelled,
+                batch_size=BATCH_SIZE,
+                sampler=RandomFixedLengthSampler(
+                    dm.labelled, MIN_TRAIN_LENGTH, shuffle=True
+                ),
+                **kwargs,
             )
             with timeop() as t:
                 history = trainer.fit(train_loader, val_loader, epochs=EPOCHS)
@@ -83,10 +99,12 @@ def main(acq_name, b, iters):
             # eval
             test_metrics = trainer.evaluate(test_loader)
             print(f"=== Iteration {i} of {ITERS} ({i/ITERS:.2%}) ===")
-            print(f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
-                  f"pool: {dm.n_unlabelled}; test: {len(test)}")
+            print(
+                f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
+                f"pool: {dm.n_unlabelled}; test: {len(test)}"
+            )
             print(f"\t[test] acc: {test_metrics['acc']:.4f}, time: {t}")
-            accs[dm.n_labelled].append(test_metrics['acc'])
+            accs[dm.n_labelled].append(test_metrics["acc"])
 
             # save stuff
             with dm.unlabelled.tmp_debug():
@@ -101,12 +119,13 @@ def main(acq_name, b, iters):
 
             with open(metrics / f"rep_{r}_iter_{i}.pkl", "wb") as fp:
                 payload = {
-                    'history': history, 'test_metrics': test_metrics,
-                    'labelled_classes': dm.unlabelled.labelled_classes,
-                    'labelled_indices': dm.unlabelled.labelled_indices,
+                    "history": history,
+                    "test_metrics": test_metrics,
+                    "labelled_classes": dm.unlabelled.labelled_classes,
+                    "labelled_indices": dm.unlabelled.labelled_indices,
                     # labelled_indices ignores the fact that there's also a val_dataset
                     # we need pool's indices to recover the true labelled_indices.
-                    'pool_indices': pool._dataset.indices,
+                    "pool_indices": pool._dataset.indices,
                 }
                 pickle.dump(payload, fp)
             torch.save(model.state_dict(), saved_models / f"rep_{r}_iter_{i}.pt")
@@ -119,5 +138,5 @@ def main(acq_name, b, iters):
                 pickle.dump(accs, fp)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main("bald", b=1, iters=231)

@@ -38,8 +38,7 @@ def dummy_label(transform=lambda x: x):
         for x in ds:
             features.append(x)
             labels.append(transform(x))
-        return torchdata.TensorDataset(torch.Tensor(features),
-                                       torch.Tensor(labels))
+        return torchdata.TensorDataset(torch.Tensor(features), torch.Tensor(labels))
 
     return _dummy_label
 
@@ -64,9 +63,7 @@ def test_unlabelled_dataset_label_with_unlabelled():
     # 0 1 2   3   4 5   6  7  8  9 10 11
     # 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14
     # second call to label
-    labelled = torchdata.ConcatDataset([
-        labelled, ud.label([1, 3, 6])
-    ])
+    labelled = torchdata.ConcatDataset([labelled, ud.label([1, 3, 6])])
     points_to_label = points_to_label.union({1, 4, 9})
     points_left = set(range(N)) - points_to_label
     assert len(ud) == len(points_left)
@@ -78,9 +75,7 @@ def test_unlabelled_dataset_label_with_unlabelled():
     # 0 1 2   3   4 5   6  7  8  9 10 11
     # 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14
     # second call to label
-    labelled = torchdata.ConcatDataset([
-        labelled, ud.label([1, 4, 6, 8])
-    ])
+    labelled = torchdata.ConcatDataset([labelled, ud.label([1, 4, 6, 8])])
     points_to_label = points_to_label.union({2, 10, 12, 14})
     points_left = set(range(N)) - points_to_label
     assert len(ud) == len(points_left)
@@ -96,7 +91,8 @@ def test_unlabelled_dataset_label_with_unlabelled():
     assert len(points_to_label) == 0
 
     # check remaining points in ud
-    for x in ud: points_left.remove(x.item())
+    for x in ud:
+        points_left.remove(x.item())
     assert len(points_left) == 0
 
     # check reset works
@@ -104,7 +100,8 @@ def test_unlabelled_dataset_label_with_unlabelled():
     assert len(ud) == N
     assert ud.labelled_indices.size(0) == 0
     full_dataset = set(range(N))
-    for x in ud: full_dataset.remove(x.item())
+    for x in ud:
+        full_dataset.remove(x.item())
     assert len(full_dataset) == 0
 
 
@@ -129,9 +126,7 @@ def test_unlabelled_dataset_label_with_labelled():
     # 0   1 2     3     4  5  6  7  8  9
     # 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14
     # second call to label
-    labelled = torchdata.ConcatDataset([
-        labelled, ud.label([0, 2, 3, 4])
-    ])
+    labelled = torchdata.ConcatDataset([labelled, ud.label([0, 2, 3, 4])])
     points_to_label = points_to_label.union({0, 3, 6, 9})
     points_left = set(range(N)) - points_to_label
     assert len(ud) == len(points_left)
@@ -143,9 +138,7 @@ def test_unlabelled_dataset_label_with_labelled():
     # 0   1 2     3     4  5  6  7  8  9
     # 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14
     # second call to label
-    labelled = torchdata.ConcatDataset([
-        labelled, ud.label([0, 1, 3])
-    ])
+    labelled = torchdata.ConcatDataset([labelled, ud.label([0, 1, 3])])
     points_to_label = points_to_label.union({2, 10, 13})
     points_left = set(range(N)) - points_to_label
     assert len(ud) == len(points_left)
@@ -161,7 +154,8 @@ def test_unlabelled_dataset_label_with_labelled():
     assert len(points_to_label) == 0
 
     # check remaining points in ud
-    for x in ud: points_left.remove(x.item())
+    for x in ud:
+        points_left.remove(x.item())
     assert len(points_left) == 0
 
     # check reset works
@@ -169,7 +163,8 @@ def test_unlabelled_dataset_label_with_labelled():
     assert len(ud) == N
     assert ud.labelled_indices.size(0) == 0
     full_dataset = set(range(N))
-    for x in ud: full_dataset.remove(x.item())
+    for x in ud:
+        full_dataset.remove(x.item())
     assert len(full_dataset) == 0
 
 
@@ -191,7 +186,7 @@ def test_data_manager():
     # and MockAcquisition returns the first `acquire` points
     should_acquire = set(range(acquire))
     for x, y in newly_acquired:
-        x = x.item();
+        x = x.item()
         y = y.item()
         assert x == y
         should_acquire.remove(x)
@@ -205,7 +200,7 @@ def test_data_manager():
     newly_acquired = itertools.islice(reversed(dm.labelled), acquire)
     should_acquire = set(range(acquire, acquire * 2))
     for x, y in newly_acquired:
-        x = x.item();
+        x = x.item()
         y = y.item()
         assert x == y
         should_acquire.remove(x)
@@ -225,7 +220,12 @@ def test_relabel_dataset():
     relabelled = RelabelDataset(test, fake_classes)
     bs = 1024
     loader = torchdata.DataLoader(relabelled, batch_size=bs, shuffle=False)
-    assert all([np.equal(fake_classes[idx * bs: (idx + 1) * bs], y).all() for idx, (_, y) in enumerate(loader)])
+    assert all(
+        [
+            np.equal(fake_classes[idx * bs : (idx + 1) * bs], y).all()
+            for idx, (_, y) in enumerate(loader)
+        ]
+    )
     loader = torchdata.DataLoader(relabelled, batch_size=1, shuffle=False)
     x, y = next(iter(loader))
     assert x[0].shape == test[0][0].shape
@@ -241,7 +241,12 @@ def test_pseudolabel_dataset():
     )
     bs = 1024
     loader = torchdata.DataLoader(pseudo_labelled, batch_size=bs, shuffle=False)
-    assert all([np.equal(fake_classes[idx * bs: (idx + 1) * bs], y).all() for idx, (_, y) in enumerate(loader)])
+    assert all(
+        [
+            np.equal(fake_classes[idx * bs : (idx + 1) * bs], y).all()
+            for idx, (_, y) in enumerate(loader)
+        ]
+    )
     loader = torchdata.DataLoader(pseudo_labelled, batch_size=1, shuffle=False)
     x, y = next(iter(loader))
     assert x[0].shape == test[0][0].shape

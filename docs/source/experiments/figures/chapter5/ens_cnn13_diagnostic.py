@@ -17,12 +17,14 @@ from alr.utils import savefig
 import os
 
 os.chdir("/Users/harry/Documents/workspace/thesis/reports/07_model_selection")
-DATA = 'CIFAR'
+DATA = "CIFAR"
 include_noise = False
 SAVE = True
 
+
 def sort_files(files):
     return sorted(files, key=lambda x: int(str(x).split("_")[-1][:-4]))
+
 
 def score_sample_plot(ax, scores, size, ylab, xlab, top=None, cifar_idx=10_000):
     if not top:
@@ -32,15 +34,25 @@ def score_sample_plot(ax, scores, size, ylab, xlab, top=None, cifar_idx=10_000):
     cifar_mask = idxs < cifar_idx
     svhn_mask = idxs >= cifar_idx
     assert cifar_mask.sum() + svhn_mask.sum() == top
-    ax.scatter(np.nonzero(cifar_mask)[0], scores[idxs[cifar_mask]], alpha=1, label=DATA, s=2)
-    ax.scatter(np.nonzero(~cifar_mask)[0], scores[idxs[svhn_mask]], color='red', label='SVHN', s=2)
+    ax.scatter(
+        np.nonzero(cifar_mask)[0], scores[idxs[cifar_mask]], alpha=1, label=DATA, s=2
+    )
+    ax.scatter(
+        np.nonzero(~cifar_mask)[0],
+        scores[idxs[svhn_mask]],
+        color="red",
+        label="SVHN",
+        s=2,
+    )
     ax.set_xlabel(xlab)
     ax.set_ylabel(ylab)
     ax.set_title(f"Size {size}")
 
+
 def itc(iteration, batch_size=400, initial=20):
     # iteration to counts
     return initial + (iteration - 1) * batch_size
+
 
 def bald_range(ax, scores, size, xlabel, ylabel):
     cifar_scores = scores[:10000]
@@ -51,6 +63,7 @@ def bald_range(ax, scores, size, xlabel, ylabel):
     if ylabel:
         ax.set_ylabel("BALD")
     ax.set_title(f"Size {size}")
+
 
 def entropy_range(ax, entropy, etype, size, xlabel, ylabel):
     cifar_ent = entropy[:10000]
@@ -111,14 +124,14 @@ confidence_2 = []
 class_1 = []
 class_2 = []
 map_containers = {
-    'bald_score': (scores_1,),
-    'bald_score2': (ascores_1,),
-    'predictive_entropy': (predictive_entropy_1,),
-    'predictive_entropy2': (apredictive_entropy_1,),
-    'average_entropy': (average_entropy_1,),
-    'average_entropy2': (aaverage_entropy_1,),
-    'confidence': (confidence_1,),
-    'class': (class_1,),
+    "bald_score": (scores_1,),
+    "bald_score2": (ascores_1,),
+    "predictive_entropy": (predictive_entropy_1,),
+    "predictive_entropy2": (apredictive_entropy_1,),
+    "average_entropy": (average_entropy_1,),
+    "average_entropy2": (aaverage_entropy_1,),
+    "confidence": (confidence_1,),
+    "class": (class_1,),
 }
 for f in files:
     with open(f, "rb") as fp:
@@ -155,7 +168,7 @@ classes = np.stack(class_1)
 
 N = 6
 interval = np.linspace(0, bald_scores.shape[0] - 1, num=N).astype(int)
-fig_params = dict(nrows=2, ncols=3,figsize=(3 * 3, 2 * 3), sharex=True, sharey=True)
+fig_params = dict(nrows=2, ncols=3, figsize=(3 * 3, 2 * 3), sharex=True, sharey=True)
 
 # sanity checks
 
@@ -168,11 +181,15 @@ conf = confidence
 fig, axes = plt.subplots(**fig_params)
 axes = axes.flatten()
 for i, ax in enumerate(axes):
-    ylab = "BALD" if i % fig_params['ncols'] == 0 else ""
-    xlab = "Samples" if i >= fig_params['ncols'] else ""
+    ylab = "BALD" if i % fig_params["ncols"] == 0 else ""
+    xlab = "Samples" if i >= fig_params["ncols"] else ""
     score_sample_plot(
-        axes[i], scores[interval[i]], top=50,
-        ylab=ylab, xlab=xlab, size=itc(interval[i] + 1)
+        axes[i],
+        scores[interval[i]],
+        top=50,
+        ylab=ylab,
+        xlab=xlab,
+        size=itc(interval[i] + 1),
     )
 axes[i].legend()
 fig.suptitle(f"Top 50 BALD scoring points ({model})")
@@ -183,9 +200,11 @@ fig, axes = plt.subplots(**fig_params)
 axes = axes.flatten()
 for i, ax in enumerate(axes):
     bald_range(
-        axes[i], scores[interval[i]], size=itc(interval[i] + 1),
-        xlabel=(i >= fig_params['ncols']),
-        ylabel=(i % fig_params['ncols'] == 0),
+        axes[i],
+        scores[interval[i]],
+        size=itc(interval[i] + 1),
+        xlabel=(i >= fig_params["ncols"]),
+        ylabel=(i % fig_params["ncols"] == 0),
     )
 fig.suptitle(f"BALD score distribution")
 if SAVE:
@@ -199,12 +218,11 @@ for i, ax in enumerate(axes):
         pent[interval[i]],
         etype="Predictive Entropy",
         size=itc(interval[i] + 1),
-        xlabel=(i >= fig_params['ncols']),
-        ylabel=(i % fig_params['ncols'] == 0),
-        gt=False
+        xlabel=(i >= fig_params["ncols"]),
+        ylabel=(i % fig_params["ncols"] == 0),
+        gt=False,
     )
 axes[i].legend()
 fig.suptitle(f"Predictive Entropy ({model})")
 if SAVE:
     savefig("/Users/harry/Documents/workspace/thesis/figures/4/ens_pred_ent.pdf")
-

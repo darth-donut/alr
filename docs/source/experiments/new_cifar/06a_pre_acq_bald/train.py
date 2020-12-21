@@ -31,8 +31,7 @@ def make_imbalanced_pool(dataset: torchdata.Dataset, classes, n):
     return torchdata.Subset(dataset, idxs)
 
 
-def uneven_split(dataset: torchdata.Dataset,
-                 mapping: dict) -> tuple:
+def uneven_split(dataset: torchdata.Dataset, mapping: dict) -> tuple:
     count = {k: v for k, v in mapping.items()}
     original_idxs = set(range(len(dataset)))
     idxs = []
@@ -43,33 +42,32 @@ def uneven_split(dataset: torchdata.Dataset,
         if count[y]:
             count[y] -= 1
             idxs.append(idx)
-    return torchdata.Subset(
-        dataset, idxs
-    ), torchdata.Subset(
+    return torchdata.Subset(dataset, idxs), torchdata.Subset(
         dataset, list(original_idxs - set(idxs))
     )
 
 
-
 def calc_calib_metrics(loader, model: nn.Module, log_dir, device):
-    evaluator = create_supervised_evaluator(
-        model, metrics=None, device=device
-    )
+    evaluator = create_supervised_evaluator(model, metrics=None, device=device)
     pds = PLPredictionSaver(log_dir)
     pds.attach(evaluator)
     evaluator.run(loader)
 
 
-def main(acq_name: str,
-         alpha: float,
-         b: int,
-         augment: bool,
-         iters: int,
-         repeats: int,
-         save_weights: bool,
-         seed: int):
-    print(f"Starting experiment with seed {seed}, augment = {augment}, save weights = {save_weights}")
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+def main(
+    acq_name: str,
+    alpha: float,
+    b: int,
+    augment: bool,
+    iters: int,
+    repeats: int,
+    save_weights: bool,
+    seed: int,
+):
+    print(
+        f"Starting experiment with seed {seed}, augment = {augment}, save weights = {save_weights}"
+    )
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     # ========= CONSTANTS ===========
@@ -117,14 +115,17 @@ def main(acq_name: str,
     manual_seed(seed)
     pool = UnlabelledDataset(pool)
     test_loader = torchdata.DataLoader(
-        test, batch_size=512, shuffle=False, **kwargs,
+        test,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
-    train_transform = test_transform = tv.transforms.Compose([
-        tv.transforms.ToTensor(),
-        tv.transforms.Normalize(
-            *Dataset.CIFAR10.normalisation_params
-        ),
-    ])
+    train_transform = test_transform = tv.transforms.Compose(
+        [
+            tv.transforms.ToTensor(),
+            tv.transforms.Normalize(*Dataset.CIFAR10.normalisation_params),
+        ]
+    )
     if augment:
         data_augmentation = Dataset.CIFAR10.get_augmentation
     else:
@@ -152,15 +153,21 @@ def main(acq_name: str,
         for i in range(1, ITERS + 1):
             models = [Dataset.CIFAR10.model.to(device) for _ in range(5)]
             trainer = PLMixupEnsembleTrainer(
-                models, 'SGD', train_transform, test_transform,
-                {'lr': .1, 'momentum': .9, 'weight_decay': 1e-4},
-                kwargs, log_dir=None,
-                rfls_length=MIN_TRAIN_LENGTH, alpha=alpha,
+                models,
+                "SGD",
+                train_transform,
+                test_transform,
+                {"lr": 0.1, "momentum": 0.9, "weight_decay": 1e-4},
+                kwargs,
+                log_dir=None,
+                rfls_length=MIN_TRAIN_LENGTH,
+                alpha=alpha,
                 min_labelled=MIN_LABELLED,
                 data_augmentation=data_augmentation,
                 batch_size=BATCH_SIZE,
-                patience=PATIENCE, lr_patience=LR_PATIENCE,
-                device=device
+                patience=PATIENCE,
+                lr_patience=LR_PATIENCE,
+                device=device,
             )
             with dm.unlabelled.tmp_debug():
                 with timeop() as t:
@@ -171,10 +178,12 @@ def main(acq_name: str,
             # eval
             test_metrics = trainer.evaluate(test_loader)
             print(f"=== Iteration {i} of {ITERS} ({i / ITERS:.2%}) ===")
-            print(f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
-                  f"pool: {dm.n_unlabelled}; test: {len(test)}")
+            print(
+                f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
+                f"pool: {dm.n_unlabelled}; test: {len(test)}"
+            )
             print(f"\t[test] acc: {test_metrics['acc']:.4f}, time: {t}")
-            accs[dm.n_labelled].append(test_metrics['acc'])
+            accs[dm.n_labelled].append(test_metrics["acc"])
 
             # save stuff
             ensemble = Ensemble(models)
@@ -182,26 +191,30 @@ def main(acq_name: str,
             with dm.unlabelled.tmp_debug():
                 pool_loader = torchdata.DataLoader(
                     temp_ds_transform(test_transform, with_targets=True)(dm.unlabelled),
-                    batch_size=512, shuffle=False,
+                    batch_size=512,
+                    shuffle=False,
                     **kwargs,
                 )
                 calc_calib_metrics(
-                    pool_loader, ensemble, calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
-                    device=device
+                    pool_loader,
+                    ensemble,
+                    calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
+                    device=device,
                 )
             calc_calib_metrics(
-                test_loader, ensemble, calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
-                device=device
+                test_loader,
+                ensemble,
+                calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
+                device=device,
             )
 
             with open(metrics / f"rep_{r}_iter_{i}.pkl", "wb") as fp:
                 payload = {
-                    'history': history,
-                    'test_metrics': test_metrics,
-                    'labelled_classes': dm.unlabelled.labelled_classes,
-                    'labelled_indices': dm.unlabelled.labelled_indices,
-                    'bald_scores': bald_scores,
-
+                    "history": history,
+                    "test_metrics": test_metrics,
+                    "labelled_classes": dm.unlabelled.labelled_classes,
+                    "labelled_indices": dm.unlabelled.labelled_indices,
+                    "bald_scores": bald_scores,
                 }
                 pickle.dump(payload, fp)
 
@@ -214,31 +227,35 @@ def main(acq_name: str,
 
             # finally, acquire points
             if acq_name == "bald":
-                acq_fn = BALD(ensemble.get_preds, device=device, batch_size=512, **kwargs)
+                acq_fn = BALD(
+                    ensemble.get_preds, device=device, batch_size=512, **kwargs
+                )
             elif acq_name == "random":
                 acq_fn = RandomAcquisition()
             else:
                 raise Exception("Done goofed.")
             dm._a_fn = acq_fn
             # transform pool samples toTensor and normalise them (since we used raw above!)
-            acquired_idxs, _ = dm.acquire(b=b, transform=temp_ds_transform(test_transform))
+            acquired_idxs, _ = dm.acquire(
+                b=b, transform=temp_ds_transform(test_transform)
+            )
             if acq_name == "bald":
                 # acquired_idxs has the top b scores from recent_score
                 bald_scores = (acquired_idxs, acq_fn.recent_score)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import argparse
 
     args = argparse.ArgumentParser()
-    args.add_argument("--acq", choices=['bald', 'random'], default='bald')
+    args.add_argument("--acq", choices=["bald", "random"], default="bald")
     args.add_argument("--alpha", type=float, default=0.4)
     args.add_argument("--b", default=10, type=int, help="Batch acq size (default = 10)")
-    args.add_argument("--augment", action='store_true')
+    args.add_argument("--augment", action="store_true")
     args.add_argument("--iters", default=199, type=int)
     args.add_argument("--reps", default=1, type=int)
     args.add_argument("--seed", type=int)
-    args.add_argument("--save", action='store_true', help='store model weights')
+    args.add_argument("--save", action="store_true", help="store model weights")
     args = args.parse_args()
 
     main(
@@ -251,5 +268,3 @@ if __name__ == '__main__':
         save_weights=args.save,
         seed=args.seed,
     )
-
-

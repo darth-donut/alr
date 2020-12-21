@@ -16,14 +16,13 @@ from torch import nn
 from torch.nn.utils import weight_norm
 
 
-
 class CNN13(nn.Module):
     """
     CNN from Mean Teacher paper
     # taken from: https://github.com/EricArazo/PseudoLabeling/blob/2fbbbd3ca648cae453e3659e2e2ed44f71be5906/utils_pseudoLab/ssl_networks.py
     """
 
-    def __init__(self, num_classes=10, drop_prob=.5):
+    def __init__(self, num_classes=10, drop_prob=0.5):
         super(CNN13, self).__init__()
         self.activation = nn.LeakyReLU(0.1)
         self.conv1a = weight_norm(nn.Conv2d(3, 128, 3, padding=1))
@@ -72,6 +71,7 @@ class CNN13(nn.Module):
         x = self.ap3(x)
         x = x.view(-1, 128)
         return F.log_softmax(self.fc1(x), dim=-1)
+
 
 class VGG(nn.Module):
     """VGG with BatchNorm performs best.
@@ -153,8 +153,49 @@ def make_layers(cfg, batch_norm=False):
 cfgs = {
     "A": [64, "M", 128, "M", 256, 256, "M", 512, 512, "M", 512, 512, "M"],
     "B": [64, 64, "M", 128, 128, "M", 256, 256, "M", 512, 512, "M", 512, 512, "M"],
-    "D": [64, 64, "M", 128, 128, "M", 256, 256, 256, "M", 512, 512, 512, "M", 512, 512, 512, "M"],
-    "E": [64, 64, "M", 128, 128, "M", 256, 256, 256, 256, "M", 512, 512, 512, 512, "M", 512, 512, 512, 512, "M"],
+    "D": [
+        64,
+        64,
+        "M",
+        128,
+        128,
+        "M",
+        256,
+        256,
+        256,
+        "M",
+        512,
+        512,
+        512,
+        "M",
+        512,
+        512,
+        512,
+        "M",
+    ],
+    "E": [
+        64,
+        64,
+        "M",
+        128,
+        128,
+        "M",
+        256,
+        256,
+        256,
+        256,
+        "M",
+        512,
+        512,
+        512,
+        512,
+        "M",
+        512,
+        512,
+        512,
+        512,
+        "M",
+    ],
 }
 
 # def _vgg(cfg, batch_norm, **kwargs):
@@ -170,7 +211,17 @@ model_urls = {
     "vgg16_cinic10_bn": "https://download.pytorch.org/models/vgg16_bn-6c64b313.pth",
     "vgg19_bn": "https://download.pytorch.org/models/vgg19_bn-c79401a0.pth",
 }
-def _vgg(arch, cfg, batch_norm, pretrained, progress, pretrained_features_only=False, **kwargs):
+
+
+def _vgg(
+    arch,
+    cfg,
+    batch_norm,
+    pretrained,
+    progress,
+    pretrained_features_only=False,
+    **kwargs,
+):
     if pretrained:
         kwargs["init_weights"] = False
     model = VGG(make_layers(cfgs[cfg], batch_norm=batch_norm), **kwargs)
@@ -180,11 +231,14 @@ def _vgg(arch, cfg, batch_norm, pretrained, progress, pretrained_features_only=F
     if pretrained_features_only:
         state_dict = load_state_dict_from_url(model_urls[arch], progress=progress)
         fixed_state_dict = {
-            path[len("features.") :]: state for path, state in state_dict.items() if "features." in path
+            path[len("features.") :]: state
+            for path, state in state_dict.items()
+            if "features." in path
         }
 
         model.features.load_state_dict(fixed_state_dict)
     return model
+
 
 # def vgg16_cinic10_bn(**kwargs):
 def vgg16_cinic10_bn(pretrained=False, progress=True, **kwargs):
@@ -212,12 +266,8 @@ def vgg16_cinic10_bn(pretrained=False, progress=True, **kwargs):
     )
 
 
-
-
 def calc_calib_metrics(loader, model: nn.Module, log_dir, device):
-    evaluator = create_supervised_evaluator(
-        model, metrics=None, device=device
-    )
+    evaluator = create_supervised_evaluator(model, metrics=None, device=device)
     pds = PLPredictionSaver(log_dir)
     pds.attach(evaluator)
     evaluator.run(loader)
@@ -225,7 +275,7 @@ def calc_calib_metrics(loader, model: nn.Module, log_dir, device):
 
 def main(model_name, repeats):
     manual_seed(42)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     # ========= CONSTANTS ===========
@@ -242,10 +292,16 @@ def main(model_name, repeats):
     train, test = Dataset.CINIC10.get(augmentation=True)
     train, val = torchdata.random_split(train, (len(train) - VAL_SIZE, VAL_SIZE))
     val_loader = torchdata.DataLoader(
-        val, batch_size=512, shuffle=False, **kwargs,
+        val,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     test_loader = torchdata.DataLoader(
-        test, batch_size=512, shuffle=False, **kwargs,
+        test,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     accs = []
 
@@ -263,19 +319,28 @@ def main(model_name, repeats):
 
     for r in range(1, REPEATS + 1):
         if model_name == "vgg":
-            model = MCDropout(vgg16_cinic10_bn(pretrained=True, num_classes=10), forward=20, fast=False).to(device)
+            model = MCDropout(
+                vgg16_cinic10_bn(pretrained=True, num_classes=10),
+                forward=20,
+                fast=False,
+            ).to(device)
         elif model_name == "13cnn":
             model = MCDropout(CNN13(), forward=20, fast=False).to(device)
         else:
             raise ValueError(f"Unknown model {model_name}.")
         trainer = Trainer(
-            model, F.nll_loss, optimiser='Adam',
-            patience=6, reload_best=True, device=device
+            model,
+            F.nll_loss,
+            optimiser="Adam",
+            patience=6,
+            reload_best=True,
+            device=device,
         )
         train_loader = torchdata.DataLoader(
-            train, batch_size=BATCH_SIZE,
+            train,
+            batch_size=BATCH_SIZE,
             sampler=RandomFixedLengthSampler(train, MIN_TRAIN_LENGTH, shuffle=True),
-            **kwargs
+            **kwargs,
         )
         with timeop() as t:
             history = trainer.fit(train_loader, val_loader, epochs=EPOCHS)
@@ -283,22 +348,20 @@ def main(model_name, repeats):
         # eval
         test_metrics = trainer.evaluate(test_loader)
         print(f"=== Repeat {r} of {REPEATS} ===")
-        print(f"\ttrain: {len(train)}; val: {len(val)}; "
-              f"test: {len(test)}")
+        print(f"\ttrain: {len(train)}; val: {len(val)}; " f"test: {len(test)}")
         print(f"\t[test] acc: {test_metrics['acc']:.4f}, time: {t}")
-        accs.append(test_metrics['acc'])
+        accs.append(test_metrics["acc"])
 
         # save stuff
         # test calib
         calc_calib_metrics(
-            test_loader, model, calib_metrics / "test" / f"rep_{r}",
-            device=device
+            test_loader, model, calib_metrics / "test" / f"rep_{r}", device=device
         )
 
         with open(metrics / f"rep_{r}.pkl", "wb") as fp:
             payload = {
-                'history': history,
-                'test_metrics': test_metrics,
+                "history": history,
+                "test_metrics": test_metrics,
             }
             pickle.dump(payload, fp)
 
@@ -308,13 +371,13 @@ def main(model_name, repeats):
         with open(template + "_accs.pkl", "wb") as fp:
             pickle.dump(accs, fp)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     import argparse
 
     args = argparse.ArgumentParser()
-    args.add_argument("--model", choices=['13cnn', 'vgg'])
+    args.add_argument("--model", choices=["13cnn", "vgg"])
     args.add_argument("--reps", default=1, type=int)
     args = args.parse_args()
 
     main(args.model, repeats=args.reps)
-

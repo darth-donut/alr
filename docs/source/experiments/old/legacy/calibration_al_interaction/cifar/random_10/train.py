@@ -17,10 +17,9 @@ from pathlib import Path
 from torch import nn
 from torch.nn.utils import weight_norm
 
+
 def calc_calib_metrics(loader, model: nn.Module, log_dir, device):
-    evaluator = create_supervised_evaluator(
-        model, metrics=None, device=device
-    )
+    evaluator = create_supervised_evaluator(model, metrics=None, device=device)
     pds = PLPredictionSaver(log_dir)
     pds.attach(evaluator)
     evaluator.run(loader)
@@ -30,7 +29,8 @@ class CIFARNet(nn.Module):
     """
     CNN from Mean Teacher paper
     """
-    def __init__(self, num_classes=10, dropRatio=.5):
+
+    def __init__(self, num_classes=10, dropRatio=0.5):
         super(CIFARNet, self).__init__()
 
         self.activation = nn.LeakyReLU(0.1)
@@ -84,7 +84,7 @@ class CIFARNet(nn.Module):
 
 def main(acq_name, b, iters, repeats):
     manual_seed(42, det_cudnn=False)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     # ========= CONSTANTS ===========
@@ -104,10 +104,16 @@ def main(acq_name, b, iters, repeats):
     pool, val = torchdata.random_split(pool, (len(pool) - VAL_SIZE, VAL_SIZE))
     pool = UnlabelledDataset(pool)
     val_loader = torchdata.DataLoader(
-        val, batch_size=512, shuffle=False, **kwargs,
+        val,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     test_loader = torchdata.DataLoader(
-        test, batch_size=512, shuffle=False, **kwargs,
+        test,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     accs = defaultdict(list)
 
@@ -133,13 +139,20 @@ def main(acq_name, b, iters, repeats):
         for i in range(1, ITERS + 1):
             model.reset_weights()
             trainer = Trainer(
-                model, F.nll_loss, optimiser='Adam',
-                patience=3, reload_best=True, device=device
+                model,
+                F.nll_loss,
+                optimiser="Adam",
+                patience=3,
+                reload_best=True,
+                device=device,
             )
             train_loader = torchdata.DataLoader(
-                dm.labelled, batch_size=BATCH_SIZE,
-                sampler=RandomFixedLengthSampler(dm.labelled, MIN_TRAIN_LENGTH, shuffle=True),
-                **kwargs
+                dm.labelled,
+                batch_size=BATCH_SIZE,
+                sampler=RandomFixedLengthSampler(
+                    dm.labelled, MIN_TRAIN_LENGTH, shuffle=True
+                ),
+                **kwargs,
             )
             with timeop() as t:
                 history = trainer.fit(train_loader, val_loader, epochs=EPOCHS)
@@ -147,30 +160,45 @@ def main(acq_name, b, iters, repeats):
             # eval
             test_metrics = trainer.evaluate(test_loader)
             print(f"=== Iteration {i} of {ITERS} ({i/ITERS:.2%}) ===")
-            print(f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
-                  f"pool: {dm.n_unlabelled}; test: {len(test)}")
+            print(
+                f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
+                f"pool: {dm.n_unlabelled}; test: {len(test)}"
+            )
             print(f"\t[test] acc: {test_metrics['acc']:.4f}, time: {t}")
-            accs[dm.n_labelled].append(test_metrics['acc'])
+            accs[dm.n_labelled].append(test_metrics["acc"])
 
             # save stuff
 
             # pool calib
             with dm.unlabelled.tmp_debug():
                 pool_loader = torchdata.DataLoader(
-                    dm.unlabelled, batch_size=512, shuffle=False,
+                    dm.unlabelled,
+                    batch_size=512,
+                    shuffle=False,
                     **kwargs,
                 )
-                calc_calib_metrics(pool_loader, model, calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}", device=device)
-            calc_calib_metrics(test_loader, model, calib_metrics / "test" / f"rep_{r}" / f"iter_{i}", device=device)
+                calc_calib_metrics(
+                    pool_loader,
+                    model,
+                    calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
+                    device=device,
+                )
+            calc_calib_metrics(
+                test_loader,
+                model,
+                calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
+                device=device,
+            )
 
             with open(metrics / f"rep_{r}_iter_{i}.pkl", "wb") as fp:
                 payload = {
-                    'history': history, 'test_metrics': test_metrics,
-                    'labelled_classes': dm.unlabelled.labelled_classes,
-                    'labelled_indices': dm.unlabelled.labelled_indices,
+                    "history": history,
+                    "test_metrics": test_metrics,
+                    "labelled_classes": dm.unlabelled.labelled_classes,
+                    "labelled_indices": dm.unlabelled.labelled_indices,
                     # labelled_indices ignores the fact that there's also a val_dataset
                     # we need pool's indices to recover the true labelled_indices.
-                    'pool_indices': pool._dataset.indices,
+                    "pool_indices": pool._dataset.indices,
                 }
                 pickle.dump(payload, fp)
             if i % 2 == 0:
@@ -184,5 +212,5 @@ def main(acq_name, b, iters, repeats):
                 pickle.dump(accs, fp)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main("random", b=10, iters=399, repeats=1)

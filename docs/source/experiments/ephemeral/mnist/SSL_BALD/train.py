@@ -13,9 +13,10 @@ import torch.utils.data as torchdata
 import torch
 from torch.nn import functional as F
 
+
 def main(threshold: float, b: int):
     manual_seed(42)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     BATCH_SIZE = 64
@@ -56,37 +57,51 @@ def main(threshold: float, b: int):
             # make pool return targets too. (i.e. debug mode)
             with dm.unlabelled.tmp_debug():
                 trainer = EphemeralTrainer(
-                    model, dm.unlabelled, F.nll_loss, 'Adam', threshold=threshold,
+                    model,
+                    dm.unlabelled,
+                    F.nll_loss,
+                    "Adam",
+                    threshold=threshold,
                     min_labelled=0.1,
-                    log_dir=(calib_metrics / f"rep_{r}" / f"iter_{i}"), patience=(3, 7),
+                    log_dir=(calib_metrics / f"rep_{r}" / f"iter_{i}"),
+                    patience=(3, 7),
                     reload_best=True,
                     init_pseudo_label_dataset=last_pld,
-                    device=device, pool_loader_kwargs=kwargs
+                    device=device,
+                    pool_loader_kwargs=kwargs,
                 )
                 train_loader = torchdata.DataLoader(
-                    dm.labelled, batch_size=BATCH_SIZE,
-                    sampler=RandomFixedLengthSampler(dm.labelled, MIN_TRAIN_LEN, shuffle=True),
-                    **kwargs
+                    dm.labelled,
+                    batch_size=BATCH_SIZE,
+                    sampler=RandomFixedLengthSampler(
+                        dm.labelled, MIN_TRAIN_LEN, shuffle=True
+                    ),
+                    **kwargs,
                 )
                 with timeop() as t:
                     history = trainer.fit(
-                        train_loader, val_loader,
-                        iterations=SSL_ITERATIONS, epochs=EPOCHS
+                        train_loader,
+                        val_loader,
+                        iterations=SSL_ITERATIONS,
+                        epochs=EPOCHS,
                     )
             last_pld = trainer.last_pseudo_label_dataset
             # eval on test set
             test_metrics = trainer.evaluate(test_loader)
-            accs[dm.n_labelled].append(test_metrics['acc'])
+            accs[dm.n_labelled].append(test_metrics["acc"])
             print(f"-- Iteration {i} of {ITERS} --")
-            print(f"\ttrain: {dm.n_labelled}; pool: {dm.n_unlabelled}\n"
-                  f"\t[test] acc: {test_metrics['acc']}; time: {t}")
+            print(
+                f"\ttrain: {dm.n_labelled}; pool: {dm.n_unlabelled}\n"
+                f"\t[test] acc: {test_metrics['acc']}; time: {t}"
+            )
 
             # save stuff
             with open(metrics / f"rep_{r}_iter_{i}.pkl", "wb") as fp:
                 payload = {
-                    'history': history, 'test_metrics': test_metrics,
-                    'labelled_classes': dm.unlabelled.labelled_classes,
-                    'labelled_indices': dm.unlabelled.labelled_indices,
+                    "history": history,
+                    "test_metrics": test_metrics,
+                    "labelled_classes": dm.unlabelled.labelled_classes,
+                    "labelled_indices": dm.unlabelled.labelled_indices,
                 }
                 pickle.dump(payload, fp)
             torch.save(model.state_dict(), saved_models / f"rep_{r}_iter_{i}.pth")
@@ -98,6 +113,5 @@ def main(threshold: float, b: int):
                 pickle.dump(accs, fp)
 
 
-if __name__ == '__main__':
-    main(threshold=.90, b=10)
-
+if __name__ == "__main__":
+    main(threshold=0.90, b=10)

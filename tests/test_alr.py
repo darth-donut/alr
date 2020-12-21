@@ -30,7 +30,9 @@ class Net2(nn.Module):
 def test_mcd_logsoft_consistency():
     # apply_softmax should be consistent with actually using F.log_softmax
     # in the model definition itself.
-    model1 = MCDropout(Net1(), output_transform=lambda x: F.log_softmax(x, dim=-1), forward=10)
+    model1 = MCDropout(
+        Net1(), output_transform=lambda x: F.log_softmax(x, dim=-1), forward=10
+    )
     model2 = MCDropout(Net2(), forward=10)
     model2.load_state_dict(model1.state_dict(), strict=True)
     model1.train()
@@ -45,7 +47,9 @@ def test_mcd_logsoft_consistency():
 
 def test_mcd_with_logsoft():
     # model's forward pass should sum to one
-    model = MCDropout(Net1(), output_transform=lambda x: F.log_softmax(x, dim=-1), forward=10)
+    model = MCDropout(
+        Net1(), output_transform=lambda x: F.log_softmax(x, dim=-1), forward=10
+    )
     model.train()
     output = model(torch.randn(size=(5, 10))).exp_().sum(dim=-1)
     assert torch.allclose(output, torch.ones_like(output))
@@ -53,7 +57,9 @@ def test_mcd_with_logsoft():
 
 def test_mcd_stochastic_fwd():
     # stochastic_forward's individual forward passes should sum to one
-    model = MCDropout(Net1(), output_transform=lambda x: F.log_softmax(x, dim=-1), forward=10)
+    model = MCDropout(
+        Net1(), output_transform=lambda x: F.log_softmax(x, dim=-1), forward=10
+    )
     model.eval()
     size = (12301, 10)
     output = model.stochastic_forward(torch.randn(size=size)).exp_()
@@ -75,8 +81,12 @@ def test_mcd_stochastic_fwd_wo_logsoft():
 
 def test_mcd_eval_forward_logsumexp():
     # using log_softmax
-    model = MCDropout(Net1(), reduce='logsumexp',
-                      output_transform=lambda x: F.log_softmax(x, dim=-1), forward=10)
+    model = MCDropout(
+        Net1(),
+        reduce="logsumexp",
+        output_transform=lambda x: F.log_softmax(x, dim=-1),
+        forward=10,
+    )
     model.eval()
     output = model(torch.randn(size=(12309, 10))).exp_().sum(dim=-1)
     assert torch.allclose(output, torch.ones_like(output))
@@ -84,7 +94,12 @@ def test_mcd_eval_forward_logsumexp():
 
 def test_mcd_eval_forward_mean():
     # using softmax
-    model = MCDropout(Net1(), reduce='mean', output_transform=lambda x: F.softmax(x, dim=-1), forward=10)
+    model = MCDropout(
+        Net1(),
+        reduce="mean",
+        output_transform=lambda x: F.softmax(x, dim=-1),
+        forward=10,
+    )
     model.eval()
     output = model(torch.randn(size=(12309, 10))).sum(dim=-1)
     assert torch.allclose(output, torch.ones_like(output))
@@ -92,7 +107,9 @@ def test_mcd_eval_forward_mean():
 
 def test_mcd_eval_forward_consistent_with_predict():
     # when model's in eval, predict should have the same behaviour as forward
-    model = MCDropout(Net1(), output_transform=lambda x: F.log_softmax(x, dim=-1), forward=10)
+    model = MCDropout(
+        Net1(), output_transform=lambda x: F.log_softmax(x, dim=-1), forward=10
+    )
     model.eval()
     input = torch.randn(size=(12309, 10))
     torch.manual_seed(42)

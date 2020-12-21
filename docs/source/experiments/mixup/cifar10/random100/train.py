@@ -19,17 +19,17 @@ from collections import defaultdict
 from pathlib import Path
 from torch import nn
 
+
 def calc_calib_metrics(loader, model: nn.Module, log_dir, device):
-    evaluator = create_supervised_evaluator(
-        model, metrics=None, device=device
-    )
+    evaluator = create_supervised_evaluator(model, metrics=None, device=device)
     pds = PLPredictionSaver(log_dir)
     pds.attach(evaluator)
     evaluator.run(loader)
 
+
 def mixup_data(x, y, alpha, device):
     # from https://github.com/facebookresearch/mixup-cifar10/blob/master/train.py
-    '''Returns mixed inputs, pairs of targets, and lambda'''
+    """Returns mixed inputs, pairs of targets, and lambda"""
     if alpha > 0:
         lam = np.random.beta(alpha, alpha)
     else:
@@ -48,9 +48,7 @@ def mixup_criterion(criterion, pred, y_a, y_b, lam):
     return lam * criterion(pred, y_a) + (1 - lam) * criterion(pred, y_b)
 
 
-def create_mixup_trainer(model: nn.Module,
-                         loss_fn, optimiser,
-                         device, alpha):
+def create_mixup_trainer(model: nn.Module, loss_fn, optimiser, device, alpha):
     def _step(_, batch):
         model.train()
         x, y = batch
@@ -66,43 +64,47 @@ def create_mixup_trainer(model: nn.Module,
     return Engine(_step)
 
 
-def train_model(model: nn.Module,
-                loss_fn, optimiser, device, alpha,
-                train_loader: torchdata.DataLoader,
-                val_loader: torchdata.DataLoader,
-                patience: int,
-                epochs: int):
+def train_model(
+    model: nn.Module,
+    loss_fn,
+    optimiser,
+    device,
+    alpha,
+    train_loader: torchdata.DataLoader,
+    val_loader: torchdata.DataLoader,
+    patience: int,
+    epochs: int,
+):
     scheduler = ReduceLROnPlateau(
-        optimiser, mode='max',
-        factor=.1, patience=10,
+        optimiser,
+        mode="max",
+        factor=0.1,
+        patience=10,
         verbose=True,
     )
 
     val_eval = create_supervised_evaluator(
-        model, metrics={'acc': Accuracy(), 'nll': Loss(F.nll_loss)},
-        device=device
+        model, metrics={"acc": Accuracy(), "nll": Loss(F.nll_loss)}, device=device
     )
-    history = {'acc': [], 'loss': []}
+    history = {"acc": [], "loss": []}
 
-    trainer = create_mixup_trainer(
-        model, loss_fn, optimiser, device, alpha
-    )
+    trainer = create_mixup_trainer(model, loss_fn, optimiser, device, alpha)
 
     @trainer.on(Events.EPOCH_COMPLETED)
     def _log(e: Engine):
         metrics = val_eval.run(val_loader).metrics
-        acc, loss = metrics['acc'], metrics['nll']
-        print(f"\tepoch {e.state.epoch:3}: "
-              f"[val] acc, loss = {acc:.4f}, {loss:.4f}")
-        history['acc'].append(acc)
-        history['loss'].append(loss)
+        acc, loss = metrics["acc"], metrics["nll"]
+        print(f"\tepoch {e.state.epoch:3}: " f"[val] acc, loss = {acc:.4f}, {loss:.4f}")
+        history["acc"].append(acc)
+        history["loss"].append(loss)
         scheduler.step(acc)
 
-    es = EarlyStopper(model, patience, trainer, key='acc', mode='max')
+    es = EarlyStopper(model, patience, trainer, key="acc", mode="max")
     es.attach(val_eval)
 
     trainer.run(
-        train_loader, max_epochs=epochs,
+        train_loader,
+        max_epochs=epochs,
     )
     es.reload_best()
     return history
@@ -110,16 +112,14 @@ def train_model(model: nn.Module,
 
 def evaluate_model(loader, model: nn.Module, loss_fn, device):
     evaluator = create_supervised_evaluator(
-        model, metrics={'acc': Accuracy(),
-                        'loss': Loss(loss_fn)},
-        device=device
+        model, metrics={"acc": Accuracy(), "loss": Loss(loss_fn)}, device=device
     )
     return evaluator.run(loader).metrics
 
 
 def main(acq_name, alpha, b, iters, repeats):
     manual_seed(42)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     # ========= CONSTANTS ===========
@@ -142,10 +142,16 @@ def main(acq_name, alpha, b, iters, repeats):
     pool, val = torchdata.random_split(pool, (len(pool) - VAL_SIZE, VAL_SIZE))
     pool = UnlabelledDataset(pool)
     val_loader = torchdata.DataLoader(
-        val, batch_size=512, shuffle=False, **kwargs,
+        val,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     test_loader = torchdata.DataLoader(
-        test, batch_size=512, shuffle=False, **kwargs,
+        test,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     accs = defaultdict(list)
 
@@ -179,61 +185,73 @@ def main(acq_name, alpha, b, iters, repeats):
             model.reset_weights()
             # because in each iteration, we modify the learning rate.
             optimiser = torch.optim.SGD(
-                model.parameters(), lr=LR,
+                model.parameters(),
+                lr=LR,
                 momentum=MOMENTUM,
                 weight_decay=DECAY,
             )
             train_loader = torchdata.DataLoader(
-                dm.labelled, batch_size=BATCH_SIZE,
+                dm.labelled,
+                batch_size=BATCH_SIZE,
                 sampler=RandomFixedLengthSampler(
-                    dm.labelled, MIN_TRAIN_LENGTH,
-                    shuffle=True
+                    dm.labelled, MIN_TRAIN_LENGTH, shuffle=True
                 ),
                 **kwargs,
             )
             with timeop() as t:
                 history = train_model(
-                    model, F.nll_loss, optimiser,
-                    device, alpha, train_loader, val_loader,
-                    patience=PATIENCE, epochs=EPOCHS
+                    model,
+                    F.nll_loss,
+                    optimiser,
+                    device,
+                    alpha,
+                    train_loader,
+                    val_loader,
+                    patience=PATIENCE,
+                    epochs=EPOCHS,
                 )
 
             # eval
-            test_metrics = evaluate_model(
-                test_loader, model, F.nll_loss, device=device
-            )
+            test_metrics = evaluate_model(test_loader, model, F.nll_loss, device=device)
 
             print(f"=== Iteration {i} of {ITERS} ({i/ITERS:.2%}) ===")
-            print(f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
-                  f"pool: {dm.n_unlabelled}; test: {len(test)}")
+            print(
+                f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
+                f"pool: {dm.n_unlabelled}; test: {len(test)}"
+            )
             print(f"\t[test] acc: {test_metrics['acc']:.4f}, time: {t}")
-            accs[dm.n_labelled].append(test_metrics['acc'])
+            accs[dm.n_labelled].append(test_metrics["acc"])
 
             # save stuff
 
             # pool calib
             with dm.unlabelled.tmp_debug():
                 pool_loader = torchdata.DataLoader(
-                    dm.unlabelled, batch_size=512, shuffle=False,
+                    dm.unlabelled,
+                    batch_size=512,
+                    shuffle=False,
                     **kwargs,
                 )
                 calc_calib_metrics(
-                    pool_loader, model, calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
-                    device=device
+                    pool_loader,
+                    model,
+                    calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
+                    device=device,
                 )
             calc_calib_metrics(
-                test_loader, model, calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
-                device=device
+                test_loader,
+                model,
+                calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
+                device=device,
             )
 
             with open(metrics / f"rep_{r}_iter_{i}.pkl", "wb") as fp:
                 payload = {
-                    'history': history,
-                    'test_metrics': test_metrics,
-                    'labelled_classes': dm.unlabelled.labelled_classes,
-                    'labelled_indices': dm.unlabelled.labelled_indices,
-                    'bald_scores': bald_scores,
-
+                    "history": history,
+                    "test_metrics": test_metrics,
+                    "labelled_classes": dm.unlabelled.labelled_classes,
+                    "labelled_indices": dm.unlabelled.labelled_indices,
+                    "bald_scores": bald_scores,
                 }
                 pickle.dump(payload, fp)
             torch.save(model.state_dict(), saved_models / f"rep_{r}_iter_{i}.pt")
@@ -254,22 +272,25 @@ def main(acq_name, alpha, b, iters, repeats):
                 bald_scores = _bald_score(
                     pred_fn=eval_fwd_exp(model),
                     dataloader=torchdata.DataLoader(
-                        acquired_ds, batch_size=512,
+                        acquired_ds,
+                        batch_size=512,
                         shuffle=False,  # don't shuffle to get 1-1 pairing with acquired_idxs
                         **kwargs,
                     ),
                     device=device,
                 )
-                assert acquired_idxs.shape[0] == bald_scores.shape[0], \
-                    f"Acquired idx length {acquired_idxs.shape[0]} does not" \
+                assert acquired_idxs.shape[0] == bald_scores.shape[0], (
+                    f"Acquired idx length {acquired_idxs.shape[0]} does not"
                     f" match bald scores length {bald_scores.shape[0]}"
+                )
                 bald_scores = list(zip(acquired_idxs, bald_scores))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import argparse
+
     args = argparse.ArgumentParser()
-    args.add_argument("--acq", choices=['bald', 'random'], default='bald')
+    args.add_argument("--acq", choices=["bald", "random"], default="bald")
     args.add_argument("--alpha", default=0.4, type=float)
     args.add_argument("--b", default=10, type=int, help="Batch acq size (default = 10)")
     args.add_argument("--iters", default=199, type=int)
@@ -277,5 +298,3 @@ if __name__ == '__main__':
     args = args.parse_args()
 
     main(args.acq, alpha=args.alpha, b=args.b, iters=args.iters, repeats=args.reps)
-
-

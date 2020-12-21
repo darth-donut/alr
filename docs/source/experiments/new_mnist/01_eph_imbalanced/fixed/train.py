@@ -14,8 +14,8 @@ import torch.utils.data as torchdata
 import torch
 from torch.nn import functional as F
 
-def uneven_split(dataset: torchdata.Dataset,
-                 mapping: dict) -> tuple:
+
+def uneven_split(dataset: torchdata.Dataset, mapping: dict) -> tuple:
     count = {k: v for k, v in mapping.items()}
     original_idxs = set(range(len(dataset)))
     idxs = []
@@ -26,16 +26,14 @@ def uneven_split(dataset: torchdata.Dataset,
         if count[y]:
             count[y] -= 1
             idxs.append(idx)
-    return torchdata.Subset(
-        dataset, idxs
-    ), torchdata.Subset(
+    return torchdata.Subset(dataset, idxs), torchdata.Subset(
         dataset, list(original_idxs - set(idxs))
     )
 
 
 def main(threshold: float, seed: int):
     print(f"Starting experiment with seed {seed}")
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     BATCH_SIZE = 64
@@ -85,43 +83,54 @@ def main(threshold: float, seed: int):
         # make pool return targets too. (i.e. debug mode)
         with pool.tmp_debug():
             trainer = EphemeralTrainer(
-                model, pool, F.nll_loss, 'Adam', threshold=threshold,
+                model,
+                pool,
+                F.nll_loss,
+                "Adam",
+                threshold=threshold,
                 min_labelled=0.1,
-                log_dir=(calib_metrics / f"rep_{r}"), patience=(3, 7),
+                log_dir=(calib_metrics / f"rep_{r}"),
+                patience=(3, 7),
                 reload_best=True,
-                device=device, pool_loader_kwargs=kwargs
+                device=device,
+                pool_loader_kwargs=kwargs,
             )
             train_loader = torchdata.DataLoader(
-                train, batch_size=BATCH_SIZE,
+                train,
+                batch_size=BATCH_SIZE,
                 sampler=RandomFixedLengthSampler(train, MIN_TRAIN_LEN, shuffle=True),
-                **kwargs
+                **kwargs,
             )
             with timeop() as t:
                 history = trainer.fit(
-                    train_loader, val_loader,
-                    iterations=SSL_ITERATIONS, epochs=EPOCHS
+                    train_loader, val_loader, iterations=SSL_ITERATIONS, epochs=EPOCHS
                 )
         # eval on test set
         test_metrics = trainer.evaluate(test_loader)
-        print(f"\ttrain: {len(train)}; pool: {len(pool)}\n"
-              f"\t[test] acc: {test_metrics['acc']}; time: {t}")
+        print(
+            f"\ttrain: {len(train)}; pool: {len(pool)}\n"
+            f"\t[test] acc: {test_metrics['acc']}; time: {t}"
+        )
 
         # save stuff
         with open(metrics / f"rep_{r}.pkl", "wb") as fp:
             payload = {
-                'history': history, 'test_metrics': test_metrics,
-                'labelled_classes': pool.labelled_classes,
-                'labelled_indices': pool.labelled_indices,
+                "history": history,
+                "test_metrics": test_metrics,
+                "labelled_classes": pool.labelled_classes,
+                "labelled_indices": pool.labelled_indices,
             }
             pickle.dump(payload, fp)
         torch.save(model.state_dict(), saved_models / f"rep_{r}.pth")
 
         with open(template + "_accs.pkl", "wb") as fp:
-            pickle.dump(test_metrics['acc'], fp)
+            pickle.dump(test_metrics["acc"], fp)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     import argparse
+
     args = argparse.ArgumentParser()
     args.add_argument("--seed", type=int)
     args = args.parse_args()
-    main(threshold=.90, seed=args.seed)
+    main(threshold=0.90, seed=args.seed)

@@ -25,7 +25,11 @@ class Noise(torchdata.Dataset):
         std = 0.15
         n = length - 2
         weak = torch.randn(size=(n // 2, channels, img_shape[0], img_shape[1])) * std
-        strong = torch.randn(size=(n // 2 + (n % 2), channels, img_shape[0], img_shape[1])) * std * 2
+        strong = (
+            torch.randn(size=(n // 2 + (n % 2), channels, img_shape[0], img_shape[1]))
+            * std
+            * 2
+        )
         self.data = torch.cat([weak, strong, black, white])
         assert self.data.shape == (length, channels, *img_shape)
 
@@ -38,7 +42,7 @@ class Noise(torchdata.Dataset):
 
 def xlogy(x, y):
     res = x * torch.log(y)
-    res[y == 0] = .0
+    res[y == 0] = 0.0
     assert torch.isfinite(res).all()
     return res
 
@@ -47,8 +51,7 @@ def get_scores(model, dataloader, device):
     model.eval()
     with torch.no_grad():
         mc_preds: torch.Tensor = torch.cat(
-            [model.stochastic_forward(x.to(device)).exp() for x, _ in dataloader],
-            dim=1
+            [model.stochastic_forward(x.to(device)).exp() for x, _ in dataloader], dim=1
         )
     # K N C
     mc_preds = mc_preds.double()
@@ -73,14 +76,14 @@ def get_scores(model, dataloader, device):
     assert E.shape == H.shape == I.shape == confidence.shape
 
     return {
-        'average_entropy': -E,
-        'predictive_entropy': H,
-        'average_entropy2': -E_1,
-        'predictive_entropy2': H_1,
-        'bald_score': I,
-        'bald_score2': I_1,
-        'confidence': confidence,
-        'class': argmax,
+        "average_entropy": -E,
+        "predictive_entropy": H,
+        "average_entropy2": -E_1,
+        "predictive_entropy2": H_1,
+        "bald_score": I,
+        "bald_score2": I_1,
+        "confidence": confidence,
+        "class": argmax,
     }
 
 
@@ -90,15 +93,19 @@ def main(root, model_name, reps, result):
     assert root.is_dir()
     result = Path(result)
     result.mkdir(parents=True)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     _, cifar_test = Dataset.CIFAR10.get()
-    transform = tv.transforms.Compose([
-        tv.transforms.ToTensor(),
-        tv.transforms.Normalize((0.4377, 0.4438, 0.4728), (0.1980, 0.2010, 0.1970))
-    ])
-    svhn_test = tv.datasets.SVHN("data", split="test", transform=transform, download=True)
+    transform = tv.transforms.Compose(
+        [
+            tv.transforms.ToTensor(),
+            tv.transforms.Normalize((0.4377, 0.4438, 0.4728), (0.1980, 0.2010, 0.1970)),
+        ]
+    )
+    svhn_test = tv.datasets.SVHN(
+        "data", split="test", transform=transform, download=True
+    )
     subset, _ = stratified_partition(svhn_test, classes=10, size=10_000)
     noise = Noise(length=20)
 
@@ -108,7 +115,10 @@ def main(root, model_name, reps, result):
     # 20,020 in length
     test = torchdata.ConcatDataset((cifar_test, svhn_test, noise))
     test_loader = torchdata.DataLoader(
-        test, shuffle=False, batch_size=512, **kwargs,
+        test,
+        shuffle=False,
+        batch_size=512,
+        **kwargs,
     )
 
     for rep in range(1, reps + 1):
@@ -127,7 +137,9 @@ def main(root, model_name, reps, result):
                 model = WRN28_2_wn(num_classes=10, dropout=0.5)
             elif model_name == "res":
                 # 2d
-                model = resnet18_v2(num_classes=10, dropout_rate=0.1, fc_dropout_rate=0.1)
+                model = resnet18_v2(
+                    num_classes=10, dropout_rate=0.1, fc_dropout_rate=0.1
+                )
             elif model_name == "pres":
                 # 2d
                 model = PreactResNet18_WNdrop(drop_val=0.1, num_classes=10)
@@ -145,12 +157,12 @@ def main(root, model_name, reps, result):
                 pickle.dump((scores, scores_another), fp)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     dataset = "cifar"
-    for model_name in ['13cnn', 'eff', 'pres', 'res', 'vgg', 'wres']:
-        main(f"saved_models/{model_name}_{dataset}_aug",
-             model_name=model_name,
-             reps=1,
-             result=f"scores/{model_name}_{dataset}",
+    for model_name in ["13cnn", "eff", "pres", "res", "vgg", "wres"]:
+        main(
+            f"saved_models/{model_name}_{dataset}_aug",
+            model_name=model_name,
+            reps=1,
+            result=f"scores/{model_name}_{dataset}",
         )
-

@@ -62,7 +62,7 @@ def test_method_time():
         assert len(t.tape) == 2 and t.tape[-1].seconds >= 0
 
     assert inspect.ismethod(f.m)
-    assert(f.m(32) == 32 * 123)
+    assert f.m(32) == 32 * 123
     assert len(t.tape) == 2
     t.reset()
     assert len(t.tape) == 0

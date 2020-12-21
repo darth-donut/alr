@@ -13,7 +13,6 @@ from collections import defaultdict
 from alr.utils import savefig
 
 
-
 def plot(dic, label, dot=False):
     x = list(dic.keys())
     y = np.array(list(dic.values()))
@@ -21,14 +20,15 @@ def plot(dic, label, dot=False):
     top = np.percentile(y, 75, axis=-1)
     btm = np.percentile(y, 25, axis=-1)
     if dot:
-        l, = plt.plot(x, median, label=label, linestyle='dashdot')
+        (l,) = plt.plot(x, median, label=label, linestyle="dashdot")
     else:
-        l, = plt.plot(x, median, label=label)
-    plt.fill_between(x, btm, top, color=l.get_color(), alpha=.2)
+        (l,) = plt.plot(x, median, label=label)
+    plt.fill_between(x, btm, top, color=l.get_color(), alpha=0.2)
 
 
-
-root = Path("/Users/harry/Documents/workspace/thesis/experiments/vanilla_repeated_acquisition/mnist/permanent")
+root = Path(
+    "/Users/harry/Documents/workspace/thesis/experiments/vanilla_repeated_acquisition/mnist/permanent"
+)
 with open(root / "no_al_b=10_thresh=0.9_accs.pkl", "rb") as fp:
     data = pickle.load(fp)
 
@@ -38,7 +38,9 @@ for trial in data:
     for e, v in enumerate(trial.values(), 1):
         perm[e].append(v)
 
-root = Path("/Users/harry/Documents/workspace/thesis/experiments/vanilla_repeated_acquisition/mnist/reconsider")
+root = Path(
+    "/Users/harry/Documents/workspace/thesis/experiments/vanilla_repeated_acquisition/mnist/reconsider"
+)
 with open(root / "no_al_b=10_thresh=0.9_accs.pkl", "rb") as fp:
     data = pickle.load(fp)
 
@@ -56,5 +58,3 @@ plt.title("MNIST test accuracy")
 plt.xlim(0, 24)
 plt.legend()
 savefig("/Users/harry/Documents/workspace/thesis/figures/3/mnist_eph_vs_perm.pdf")
-
-

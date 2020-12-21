@@ -30,7 +30,9 @@ class EpochExtender(torchdata.Sampler):
 class RandomFixedLengthSampler(torchdata.Sampler):
     # Adapted from BatchBALD Redux with modifications
     # https://github.com/BlackHC/batchbald_redux/blob/110161db3208d4df1d47146a7ac76a9794d1cab7/batchbald_redux/active_learning.py#L120Args:
-    def __init__(self, dataset: torchdata.Dataset, length: int, shuffle: Optional[bool] = False):
+    def __init__(
+        self, dataset: torchdata.Dataset, length: int, shuffle: Optional[bool] = False
+    ):
         r"""
         Extends the epoch by sampling with replacement from the provided dataset
         until `length` samples are drawn. The number of samples in
@@ -55,9 +57,7 @@ class RandomFixedLengthSampler(torchdata.Sampler):
 
     def __iter__(self):
         if self._length > len(self._dataset):
-            return iter(
-                np.random.permutation(self._length) % len(self._dataset)
-            )
+            return iter(np.random.permutation(self._length) % len(self._dataset))
         else:
             if self._shuffle:
                 return iter(np.random.permutation(len(self._dataset)))
@@ -68,11 +68,13 @@ class RandomFixedLengthSampler(torchdata.Sampler):
 
 
 class MinLabelledSampler(torchdata.BatchSampler):
-    def __init__(self,
-                 labelled: torchdata.Dataset,
-                 pseudo_labelled: torchdata.Dataset,
-                 batch_size: int,
-                 min_labelled: Union[int, float]):
+    def __init__(
+        self,
+        labelled: torchdata.Dataset,
+        pseudo_labelled: torchdata.Dataset,
+        batch_size: int,
+        min_labelled: Union[int, float],
+    ):
         r"""
         Given labelled and pseudo_labelled datasets, returns a batch sampler that always yields
         exactly `min_labelled` points from the `labelled` dataset. If there is not enough
@@ -87,7 +89,11 @@ class MinLabelledSampler(torchdata.BatchSampler):
             min_labelled (int, float): min number of points that comes from `labelled`. Must be smaller
                 than `batch_size`. If `float` is provided, then this argument is treated as a proportion.
         """
-        min_labelled = min_labelled if type(min_labelled) == int else round(min_labelled * batch_size + .5)
+        min_labelled = (
+            min_labelled
+            if type(min_labelled) == int
+            else round(min_labelled * batch_size + 0.5)
+        )
         assert batch_size > min_labelled
         self._labelled = labelled
         self._pseudo_labelled = pseudo_labelled
@@ -104,9 +110,13 @@ class MinLabelledSampler(torchdata.BatchSampler):
 
     def __iter__(self):
         num_unlabelled = self._batch_size - self._min_labelled
-        labelled_indices = np.random.permutation(len(self) * self._min_labelled) % len(self._labelled)
+        labelled_indices = np.random.permutation(len(self) * self._min_labelled) % len(
+            self._labelled
+        )
         unlabelled_indices = np.random.permutation(len(self._pseudo_labelled))
         for i in range(len(self)):
-            r1 = labelled_indices[i * self._min_labelled: (i + 1) * self._min_labelled]
-            r2 = unlabelled_indices[i * num_unlabelled: (i + 1) * num_unlabelled] + len(self._labelled)
+            r1 = labelled_indices[i * self._min_labelled : (i + 1) * self._min_labelled]
+            r2 = unlabelled_indices[
+                i * num_unlabelled : (i + 1) * num_unlabelled
+            ] + len(self._labelled)
             yield np.r_[r1, r2]

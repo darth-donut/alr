@@ -8,24 +8,37 @@ from torch.nn.utils import weight_norm
 
 # model = WRN28_2_wn(num_classes=10, dropout=0.5)
 
+
 def conv3x3(in_planes, out_planes, stride=1):
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=True)
+    return nn.Conv2d(
+        in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=True
+    )
 
 
 class wide_WN(nn.Module):
     def __init__(self, in_planes, planes, dropout_rate, stride=1):
         super(wide_WN, self).__init__()
         self.bn1 = nn.BatchNorm2d(in_planes)
-        self.conv1 = weight_norm(nn.Conv2d(in_planes, planes, kernel_size=3, padding=1, bias=True))
+        self.conv1 = weight_norm(
+            nn.Conv2d(in_planes, planes, kernel_size=3, padding=1, bias=True)
+        )
         self.dropout = nn.Dropout(p=dropout_rate)
         self.bn2 = nn.BatchNorm2d(planes)
-        self.conv2 = weight_norm(nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=True))
+        self.conv2 = weight_norm(
+            nn.Conv2d(
+                planes, planes, kernel_size=3, stride=stride, padding=1, bias=True
+            )
+        )
 
         self.act = torch.nn.LeakyReLU()
         self.shortcut = nn.Sequential()
         if stride != 1 or in_planes != planes:
             self.shortcut = nn.Sequential(
-                weight_norm(nn.Conv2d(in_planes, planes, kernel_size=1, stride=stride, bias=True)),
+                weight_norm(
+                    nn.Conv2d(
+                        in_planes, planes, kernel_size=1, stride=stride, bias=True
+                    )
+                ),
             )
 
     def forward(self, x):
@@ -37,12 +50,11 @@ class wide_WN(nn.Module):
 
 
 class Wide_ResNet_WN(nn.Module):
-
     def __init__(self, block, depth, widen_factor, dropout_rate, num_classes):
         super(Wide_ResNet_WN, self).__init__()
         self.in_planes = 16
 
-        assert ((depth - 4) % 6 == 0), 'Wide-resnet_v2 depth should be 6n+4'
+        assert (depth - 4) % 6 == 0, "Wide-resnet_v2 depth should be 6n+4"
         n = int((depth - 4) / 6)
         k = widen_factor
 
@@ -81,5 +93,7 @@ class Wide_ResNet_WN(nn.Module):
 
 
 def WRN28_2_wn(num_classes=10, dropout=0.0):
-    model = Wide_ResNet_WN(wide_WN, depth=28, widen_factor=2, dropout_rate=dropout, num_classes=num_classes)
+    model = Wide_ResNet_WN(
+        wide_WN, depth=28, widen_factor=2, dropout_rate=dropout, num_classes=num_classes
+    )
     return model

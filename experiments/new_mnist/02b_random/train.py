@@ -19,9 +19,7 @@ import numpy as np
 
 
 def calc_calib_metric(loader, model, device, log_dir):
-    save_pl_metrics = create_supervised_evaluator(
-        model, metrics=None, device=device
-    )
+    save_pl_metrics = create_supervised_evaluator(model, metrics=None, device=device)
     pps = PLPredictionSaver(
         log_dir=log_dir,
     )
@@ -29,8 +27,7 @@ def calc_calib_metric(loader, model, device, log_dir):
     save_pl_metrics.run(loader)
 
 
-def uneven_split(dataset: torchdata.Dataset,
-                 mapping: dict) -> tuple:
+def uneven_split(dataset: torchdata.Dataset, mapping: dict) -> tuple:
     count = {k: v for k, v in mapping.items()}
     original_idxs = set(range(len(dataset)))
     idxs = []
@@ -41,17 +38,14 @@ def uneven_split(dataset: torchdata.Dataset,
         if count[y]:
             count[y] -= 1
             idxs.append(idx)
-    return torchdata.Subset(
-        dataset, idxs
-    ), torchdata.Subset(
+    return torchdata.Subset(dataset, idxs), torchdata.Subset(
         dataset, list(original_idxs - set(idxs))
     )
 
 
-
 def main(acq_name, b, iters, reps, seed):
     print(f"Starting experiment with seed {seed}")
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     # ========= CONSTANTS ===========
@@ -86,10 +80,16 @@ def main(acq_name, b, iters, reps, seed):
     pool_idxs = (pool_idxs, pool.indices)
     pool = UnlabelledDataset(pool)
     val_loader = torchdata.DataLoader(
-        val, batch_size=1024, shuffle=False, **kwargs,
+        val,
+        batch_size=1024,
+        shuffle=False,
+        **kwargs,
     )
     test_loader = torchdata.DataLoader(
-        test, batch_size=1024, shuffle=False, **kwargs,
+        test,
+        batch_size=1024,
+        shuffle=False,
+        **kwargs,
     )
     accs = defaultdict(list)
 
@@ -119,13 +119,20 @@ def main(acq_name, b, iters, reps, seed):
         for i in range(1, ITERS + 1):
             model.reset_weights()
             trainer = Trainer(
-                model, F.nll_loss, optimiser='Adam',
-                patience=3, reload_best=True, device=device
+                model,
+                F.nll_loss,
+                optimiser="Adam",
+                patience=3,
+                reload_best=True,
+                device=device,
             )
             train_loader = torchdata.DataLoader(
-                dm.labelled, batch_size=BATCH_SIZE,
-                sampler=RandomFixedLengthSampler(dm.labelled, MIN_TRAIN_LENGTH, shuffle=True),
-                **kwargs
+                dm.labelled,
+                batch_size=BATCH_SIZE,
+                sampler=RandomFixedLengthSampler(
+                    dm.labelled, MIN_TRAIN_LENGTH, shuffle=True
+                ),
+                **kwargs,
             )
             with timeop() as t:
                 history = trainer.fit(train_loader, val_loader, epochs=EPOCHS)
@@ -133,32 +140,41 @@ def main(acq_name, b, iters, reps, seed):
             # eval
             test_metrics = trainer.evaluate(test_loader)
             print(f"=== Iteration {i} of {ITERS} ({i/ITERS:.2%}) ===")
-            print(f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
-                  f"pool: {dm.n_unlabelled}; test: {len(test)}")
+            print(
+                f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
+                f"pool: {dm.n_unlabelled}; test: {len(test)}"
+            )
             print(f"\t[test] acc: {test_metrics['acc']:.4f}, time: {t}")
-            accs[dm.n_labelled].append(test_metrics['acc'])
+            accs[dm.n_labelled].append(test_metrics["acc"])
 
             # save stuff
             with dm.unlabelled.tmp_debug():
                 pool_loader = torchdata.DataLoader(
-                    dm.unlabelled, batch_size=1024,
-                    shuffle=False, **kwargs,
+                    dm.unlabelled,
+                    batch_size=1024,
+                    shuffle=False,
+                    **kwargs,
                 )
                 calc_calib_metric(
-                    pool_loader, model, device,
-                    (calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}")
+                    pool_loader,
+                    model,
+                    device,
+                    (calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}"),
                 )
             calc_calib_metric(
-                test_loader, model, device,
-                (calib_metrics / "test" / f"rep_{r}" / f"iter_{i}")
+                test_loader,
+                model,
+                device,
+                (calib_metrics / "test" / f"rep_{r}" / f"iter_{i}"),
             )
 
             with open(metrics / f"rep_{r}_iter_{i}.pkl", "wb") as fp:
                 payload = {
-                    'history': history, 'test_metrics': test_metrics,
-                    'labelled_classes': dm.unlabelled.labelled_classes,
-                    'labelled_indices': dm.unlabelled.labelled_indices,
-                    'bald_scores': bald_scores,
+                    "history": history,
+                    "test_metrics": test_metrics,
+                    "labelled_classes": dm.unlabelled.labelled_classes,
+                    "labelled_indices": dm.unlabelled.labelled_indices,
+                    "bald_scores": bald_scores,
                 }
                 pickle.dump(payload, fp)
             torch.save(model.state_dict(), saved_models / f"rep_{r}_iter_{i}.pt")
@@ -174,14 +190,14 @@ def main(acq_name, b, iters, reps, seed):
                 pickle.dump(accs, fp)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import argparse
+
     args = argparse.ArgumentParser()
     args.add_argument("--seed", type=int)
-    args.add_argument("--acq", choices=['bald', 'random'], default='bald')
+    args.add_argument("--acq", choices=["bald", "random"], default="bald")
     args.add_argument("--iters", type=int, default=24)
     args.add_argument("--reps", type=int, default=1)
     args.add_argument("--b", type=int, default=10)
     args = args.parse_args()
     main(args.acq, b=args.b, iters=args.iters, reps=args.reps, seed=args.seed)
-

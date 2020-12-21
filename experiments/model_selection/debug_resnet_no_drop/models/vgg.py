@@ -97,13 +97,62 @@ def make_layers(cfg, batch_norm=False):
 cfgs = {
     "A": [64, "M", 128, "M", 256, 256, "M", 512, 512, "M", 512, 512, "M"],
     "B": [64, 64, "M", 128, 128, "M", 256, 256, "M", 512, 512, "M", 512, 512, "M"],
-    "D": [64, 64, "M", 128, 128, "M", 256, 256, 256, "M", 512, 512, 512, "M", 512, 512, 512, "M"],
-    "E": [64, 64, "M", 128, 128, "M", 256, 256, 256, 256, "M", 512, 512, 512, 512, "M", 512, 512, 512, 512, "M"],
+    "D": [
+        64,
+        64,
+        "M",
+        128,
+        128,
+        "M",
+        256,
+        256,
+        256,
+        "M",
+        512,
+        512,
+        512,
+        "M",
+        512,
+        512,
+        512,
+        "M",
+    ],
+    "E": [
+        64,
+        64,
+        "M",
+        128,
+        128,
+        "M",
+        256,
+        256,
+        256,
+        256,
+        "M",
+        512,
+        512,
+        512,
+        512,
+        "M",
+        512,
+        512,
+        512,
+        512,
+        "M",
+    ],
 }
 
 # def _vgg(cfg, batch_norm, **kwargs):
 #     return VGG(make_layers(cfgs[cfg], batch_norm=batch_norm), **kwargs)
-def _vgg(arch, cfg, batch_norm, pretrained, progress, pretrained_features_only=False, **kwargs):
+def _vgg(
+    arch,
+    cfg,
+    batch_norm,
+    pretrained,
+    progress,
+    pretrained_features_only=False,
+    **kwargs
+):
     if pretrained:
         kwargs["init_weights"] = False
     model = VGG(make_layers(cfgs[cfg], batch_norm=batch_norm), **kwargs)
@@ -113,11 +162,14 @@ def _vgg(arch, cfg, batch_norm, pretrained, progress, pretrained_features_only=F
     if pretrained_features_only:
         state_dict = load_state_dict_from_url(model_urls[arch], progress=progress)
         fixed_state_dict = {
-            path[len("features.") :]: state for path, state in state_dict.items() if "features." in path
+            path[len("features.") :]: state
+            for path, state in state_dict.items()
+            if "features." in path
         }
 
         model.features.load_state_dict(fixed_state_dict)
     return model
+
 
 # def vgg16_cinic10_bn(**kwargs):
 def vgg16_cinic10_bn(pretrained=False, progress=True, **kwargs):

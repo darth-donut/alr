@@ -30,7 +30,7 @@ class AugmentNoise(torchdata.Dataset):
 
 def xlogy(x, y):
     res = x * torch.log(y)
-    res[y == 0] = .0
+    res[y == 0] = 0.0
     assert torch.isfinite(res).all()
     return res
 
@@ -39,8 +39,7 @@ def get_scores(model, dataloader, device):
     model.eval()
     with torch.no_grad():
         mc_preds: torch.Tensor = torch.cat(
-            [model.stochastic_forward(x.to(device)).exp() for x, _ in dataloader],
-            dim=1
+            [model.stochastic_forward(x.to(device)).exp() for x, _ in dataloader], dim=1
         )
     # K N C
     mc_preds = mc_preds.double()
@@ -65,14 +64,14 @@ def get_scores(model, dataloader, device):
     assert E.shape == H.shape == I.shape == confidence.shape
 
     return {
-        'average_entropy': -E,
-        'predictive_entropy': H,
-        'average_entropy2': -E_1,
-        'predictive_entropy2': H_1,
-        'bald_score': I,
-        'bald_score2': I_1,
-        'confidence': confidence,
-        'class': argmax,
+        "average_entropy": -E,
+        "predictive_entropy": H,
+        "average_entropy2": -E_1,
+        "predictive_entropy2": H_1,
+        "bald_score": I,
+        "bald_score2": I_1,
+        "confidence": confidence,
+        "class": argmax,
     }
 
 
@@ -82,7 +81,7 @@ def main(root, reps, result):
     assert root.is_dir()
     result = Path(result)
     result.mkdir(parents=True)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     _, test = Dataset.MNIST.get()
@@ -95,7 +94,10 @@ def main(root, reps, result):
     test = torchdata.ConcatDataset(full_test)
 
     test_loader = torchdata.DataLoader(
-        test, shuffle=False, batch_size=512, **kwargs,
+        test,
+        shuffle=False,
+        batch_size=512,
+        **kwargs,
     )
 
     for rep in range(1, reps + 1):
@@ -114,9 +116,9 @@ def main(root, reps, result):
                 pickle.dump((scores, scores_another), fp)
 
 
-if __name__ == '__main__':
-    main(f"saved_models/bald_10",
-         reps=2,
-         result=f"scores",
+if __name__ == "__main__":
+    main(
+        f"saved_models/bald_10",
+        reps=2,
+        result=f"scores",
     )
-

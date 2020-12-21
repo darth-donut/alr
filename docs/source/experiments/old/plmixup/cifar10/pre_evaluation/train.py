@@ -29,23 +29,17 @@ class Net(ALRModel):
     def forward(self, x):
         return self.model(x)
 
+
 def calc_calib_metrics(loader, model: nn.Module, log_dir, device):
-    evaluator = create_supervised_evaluator(
-        model, metrics=None, device=device
-    )
+    evaluator = create_supervised_evaluator(model, metrics=None, device=device)
     pds = PLPredictionSaver(log_dir)
     pds.attach(evaluator)
     evaluator.run(loader)
 
 
-def main(acq_name: str,
-         alpha: float,
-         b: int,
-         augment: bool,
-         iters: int,
-         repeats: int):
+def main(acq_name: str, alpha: float, b: int, augment: bool, iters: int, repeats: int):
     manual_seed(42)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     # ========= CONSTANTS ===========
@@ -71,18 +65,23 @@ def main(acq_name: str,
     train, pool, test = Dataset.CIFAR10.get_fixed(raw=True)
     pool, val = torchdata.random_split(pool, (len(pool) - VAL_SIZE, VAL_SIZE))
     pool = UnlabelledDataset(pool)
-    train_transform = test_transform = tv.transforms.Compose([
-        tv.transforms.ToTensor(),
-        tv.transforms.Normalize(
-            *Dataset.CIFAR10.normalisation_params
-        ),
-    ])
+    train_transform = test_transform = tv.transforms.Compose(
+        [
+            tv.transforms.ToTensor(),
+            tv.transforms.Normalize(*Dataset.CIFAR10.normalisation_params),
+        ]
+    )
     test_loader = torchdata.DataLoader(
-        test, batch_size=512, shuffle=False, **kwargs,
+        test,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     val_loader = torchdata.DataLoader(
         temp_ds_transform(test_transform, with_targets=True)(val),
-        batch_size=512, shuffle=False, **kwargs,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     ds_transformer = temp_ds_transform(test_transform)
     if augment:
@@ -122,15 +121,21 @@ def main(acq_name: str,
         for i in range(1, ITERS + 1):
             model_regular.reset_weights()
             trainer = PLMixupTrainer(
-                model_regular, 'SGD', train_transform, test_transform,
-                {'lr': .1, 'momentum': .9, 'weight_decay': 1e-4},
-                kwargs, log_dir=None,
-                rfls_length=MIN_TRAIN_LENGTH, alpha=alpha,
+                model_regular,
+                "SGD",
+                train_transform,
+                test_transform,
+                {"lr": 0.1, "momentum": 0.9, "weight_decay": 1e-4},
+                kwargs,
+                log_dir=None,
+                rfls_length=MIN_TRAIN_LENGTH,
+                alpha=alpha,
                 min_labelled=MIN_LABELLED,
                 data_augmentation=data_augmentation,
                 batch_size=BATCH_SIZE,
-                patience=PATIENCE, lr_patience=LR_PATIENCE,
-                device=device
+                patience=PATIENCE,
+                lr_patience=LR_PATIENCE,
+                device=device,
             )
             with dm.unlabelled.tmp_debug():
                 with timeop() as t:
@@ -141,10 +146,12 @@ def main(acq_name: str,
             # eval
             test_metrics = trainer.evaluate(test_loader)
             print(f"=== Iteration {i} of {ITERS} ({i / ITERS:.2%}) ===")
-            print(f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
-                  f"pool: {dm.n_unlabelled}; test: {len(test)}")
+            print(
+                f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
+                f"pool: {dm.n_unlabelled}; test: {len(test)}"
+            )
             print(f"\t[test] acc: {test_metrics['acc']:.4f}, time: {t}")
-            accs[dm.n_labelled].append(test_metrics['acc'])
+            accs[dm.n_labelled].append(test_metrics["acc"])
 
             # save stuff
 
@@ -152,78 +159,102 @@ def main(acq_name: str,
             with dm.unlabelled.tmp_debug():
                 pool_loader = torchdata.DataLoader(
                     temp_ds_transform(test_transform, with_targets=True)(dm.unlabelled),
-                    batch_size=512, shuffle=False,
+                    batch_size=512,
+                    shuffle=False,
                     **kwargs,
                 )
                 calc_calib_metrics(
-                    pool_loader, model_regular, calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
-                    device=device
+                    pool_loader,
+                    model_regular,
+                    calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
+                    device=device,
                 )
             calc_calib_metrics(
-                test_loader, model_regular, calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
-                device=device
+                test_loader,
+                model_regular,
+                calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
+                device=device,
             )
 
             with open(metrics / f"rep_{r}_iter_{i}.pkl", "wb") as fp:
                 payload = {
-                    'history': history,
-                    'test_metrics': test_metrics,
-                    'labelled_classes': dm.unlabelled.labelled_classes,
-                    'labelled_indices': dm.unlabelled.labelled_indices,
-                    'bald_scores': bald_scores,
-
+                    "history": history,
+                    "test_metrics": test_metrics,
+                    "labelled_classes": dm.unlabelled.labelled_classes,
+                    "labelled_indices": dm.unlabelled.labelled_indices,
+                    "bald_scores": bald_scores,
                 }
                 pickle.dump(payload, fp)
-            torch.save(model_regular.state_dict(), saved_models / f"rep_{r}_iter_{i}.pt")
+            torch.save(
+                model_regular.state_dict(), saved_models / f"rep_{r}_iter_{i}.pt"
+            )
             # flush results frequently for the impatient
             with open(template + "_accs.pkl", "wb") as fp:
                 pickle.dump(accs, fp)
 
-            if i == ITERS: continue
+            if i == ITERS:
+                continue
 
             # before acquiring points, train using regular trainer
             model.reset_weights()
             trainer = Trainer(
-                model, F.nll_loss, optimiser='Adam',
-                patience=3, reload_best=True, device=device
+                model,
+                F.nll_loss,
+                optimiser="Adam",
+                patience=3,
+                reload_best=True,
+                device=device,
             )
             train_loader = torchdata.DataLoader(
                 temp_ds_transform(train_transform, with_targets=True)(dm.labelled),
                 batch_size=BATCH_SIZE_SUPERVISED,
-                sampler=RandomFixedLengthSampler(dm.labelled, MIN_TRAIN_LENGTH, shuffle=True),
-                **kwargs
+                sampler=RandomFixedLengthSampler(
+                    dm.labelled, MIN_TRAIN_LENGTH, shuffle=True
+                ),
+                **kwargs,
             )
             with timeop() as t:
-                history = trainer.fit(train_loader, val_loader, epochs=EPOCHS_SUPERVISED)
+                history = trainer.fit(
+                    train_loader, val_loader, epochs=EPOCHS_SUPERVISED
+                )
 
             test_metrics = trainer.evaluate(test_loader)
-            print(f"\ttrain: {dm.n_labelled} "
-                  f"[test] supervised acc: {test_metrics['acc']:.4f}, time: {t}")
+            print(
+                f"\ttrain: {dm.n_labelled} "
+                f"[test] supervised acc: {test_metrics['acc']:.4f}, time: {t}"
+            )
 
             # pool calib
             with dm.unlabelled.tmp_debug():
                 pool_loader = torchdata.DataLoader(
                     temp_ds_transform(test_transform, with_targets=True)(dm.unlabelled),
-                    batch_size=512, shuffle=False,
+                    batch_size=512,
+                    shuffle=False,
                     **kwargs,
                 )
                 calc_calib_metrics(
-                    pool_loader, model, calib_metrics / "supervised" / "pool" / f"rep_{r}" / f"iter_{i}",
-                    device=device
+                    pool_loader,
+                    model,
+                    calib_metrics / "supervised" / "pool" / f"rep_{r}" / f"iter_{i}",
+                    device=device,
                 )
             calc_calib_metrics(
-                test_loader, model, calib_metrics / "supervised" / "test" / f"rep_{r}" / f"iter_{i}",
-                device=device
+                test_loader,
+                model,
+                calib_metrics / "supervised" / "test" / f"rep_{r}" / f"iter_{i}",
+                device=device,
             )
 
             with open(metrics / f"supervised_rep_{r}_iter_{i}.pkl", "wb") as fp:
                 payload = {
-                    'history': history,
-                    'test_metrics': test_metrics,
+                    "history": history,
+                    "test_metrics": test_metrics,
                 }
                 pickle.dump(payload, fp)
 
-            torch.save(model.state_dict(), saved_models / f"supervised_rep_{r}_iter_{i}.pt")
+            torch.save(
+                model.state_dict(), saved_models / f"supervised_rep_{r}_iter_{i}.pt"
+            )
 
             # finally, acquire points
             # transform pool samples toTensor and normalise them (since we used raw above!)
@@ -240,26 +271,28 @@ def main(acq_name: str,
                 bald_scores = _bald_score(
                     pred_fn=eval_fwd_exp(model),
                     dataloader=torchdata.DataLoader(
-                        acquired_ds, batch_size=512,
+                        acquired_ds,
+                        batch_size=512,
                         shuffle=False,  # don't shuffle to get 1-1 pairing with acquired_idxs
                         **kwargs,
                     ),
                     device=device,
                 )
-                assert acquired_idxs.shape[0] == bald_scores.shape[0], \
-                    f"Acquired idx length {acquired_idxs.shape[0]} does not" \
+                assert acquired_idxs.shape[0] == bald_scores.shape[0], (
+                    f"Acquired idx length {acquired_idxs.shape[0]} does not"
                     f" match bald scores length {bald_scores.shape[0]}"
+                )
                 bald_scores = list(zip(acquired_idxs, bald_scores))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import argparse
 
     args = argparse.ArgumentParser()
-    args.add_argument("--acq", choices=['bald', 'random'], default='bald')
+    args.add_argument("--acq", choices=["bald", "random"], default="bald")
     args.add_argument("--alpha", type=float, default=0.4)
     args.add_argument("--b", default=10, type=int, help="Batch acq size (default = 10)")
-    args.add_argument("--augment", action='store_true')
+    args.add_argument("--augment", action="store_true")
     args.add_argument("--iters", default=199, type=int)
     args.add_argument("--reps", default=1, type=int)
     args = args.parse_args()
@@ -270,5 +303,5 @@ if __name__ == '__main__':
         b=args.b,
         augment=args.augment,
         iters=args.iters,
-        repeats=args.reps
+        repeats=args.reps,
     )

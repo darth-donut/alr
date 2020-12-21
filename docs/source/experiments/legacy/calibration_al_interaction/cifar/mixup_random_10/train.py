@@ -27,7 +27,8 @@ class CIFARNet(nn.Module):
     """
     CNN from Mean Teacher paper
     """
-    def __init__(self, num_classes=10, dropRatio=.5):
+
+    def __init__(self, num_classes=10, dropRatio=0.5):
         super(CIFARNet, self).__init__()
 
         self.activation = nn.LeakyReLU(0.1)
@@ -140,9 +141,7 @@ class CIFARNet(nn.Module):
 
 
 def calib_metrics(loader, model: nn.Module, log_dir, device):
-    evaluator = create_supervised_evaluator(
-        model, metrics=None, device=device
-    )
+    evaluator = create_supervised_evaluator(model, metrics=None, device=device)
     pds = PLPredictionSaver(log_dir)
     pds.attach(evaluator)
     evaluator.run(loader)
@@ -150,7 +149,7 @@ def calib_metrics(loader, model: nn.Module, log_dir, device):
 
 def mixup_data(x, y, alpha, device):
     # from https://github.com/facebookresearch/mixup-cifar10/blob/master/train.py
-    '''Returns mixed inputs, pairs of targets, and lambda'''
+    """Returns mixed inputs, pairs of targets, and lambda"""
     if alpha > 0:
         lam = np.random.beta(alpha, alpha)
     else:
@@ -169,9 +168,7 @@ def mixup_criterion(criterion, pred, y_a, y_b, lam):
     return lam * criterion(pred, y_a) + (1 - lam) * criterion(pred, y_b)
 
 
-def create_mixup_trainer(model: nn.Module,
-                         loss_fn, optimiser,
-                         device, alpha):
+def create_mixup_trainer(model: nn.Module, loss_fn, optimiser, device, alpha):
     def _step(_, batch):
         model.train()
         x, y = batch
@@ -187,43 +184,47 @@ def create_mixup_trainer(model: nn.Module,
     return Engine(_step)
 
 
-def train_model(model: nn.Module,
-                loss_fn, optimiser, device, alpha,
-                train_loader: torchdata.DataLoader,
-                val_loader: torchdata.DataLoader,
-                patience: int,
-                epochs: int):
+def train_model(
+    model: nn.Module,
+    loss_fn,
+    optimiser,
+    device,
+    alpha,
+    train_loader: torchdata.DataLoader,
+    val_loader: torchdata.DataLoader,
+    patience: int,
+    epochs: int,
+):
     scheduler = ReduceLROnPlateau(
-        optimiser, mode='max',
-        factor=.1, patience=10,
+        optimiser,
+        mode="max",
+        factor=0.1,
+        patience=10,
         verbose=True,
     )
 
     val_eval = create_supervised_evaluator(
-        model, metrics={'acc': Accuracy(), 'nll': Loss(F.nll_loss)},
-        device=device
+        model, metrics={"acc": Accuracy(), "nll": Loss(F.nll_loss)}, device=device
     )
-    history = {'acc': [], 'loss': []}
+    history = {"acc": [], "loss": []}
 
-    trainer = create_mixup_trainer(
-        model, loss_fn, optimiser, device, alpha
-    )
+    trainer = create_mixup_trainer(model, loss_fn, optimiser, device, alpha)
 
     @trainer.on(Events.EPOCH_COMPLETED)
     def _log(e: Engine):
         metrics = val_eval.run(val_loader).metrics
-        acc, loss = metrics['acc'], metrics['nll']
-        print(f"\tepoch {e.state.epoch:3}: "
-              f"[val] acc, loss = {acc:.4f}, {loss:.4f}")
-        history['acc'].append(acc)
-        history['loss'].append(loss)
+        acc, loss = metrics["acc"], metrics["nll"]
+        print(f"\tepoch {e.state.epoch:3}: " f"[val] acc, loss = {acc:.4f}, {loss:.4f}")
+        history["acc"].append(acc)
+        history["loss"].append(loss)
         scheduler.step(acc)
 
-    es = EarlyStopper(model, patience, trainer, key='acc', mode='max')
+    es = EarlyStopper(model, patience, trainer, key="acc", mode="max")
     es.attach(val_eval)
 
     trainer.run(
-        train_loader, max_epochs=epochs,
+        train_loader,
+        max_epochs=epochs,
     )
     es.reload_best()
     return history
@@ -231,12 +232,10 @@ def train_model(model: nn.Module,
 
 def evaluate_model(loader, model: nn.Module, loss_fn, device):
     evaluator = create_supervised_evaluator(
-        model, metrics={'acc': Accuracy(),
-                        'nll': Loss(loss_fn)},
-        device=device
+        model, metrics={"acc": Accuracy(), "nll": Loss(loss_fn)}, device=device
     )
     metrics = evaluator.run(loader).metrics
-    return metrics['acc'], metrics['nll']
+    return metrics["acc"], metrics["nll"]
 
 
 def main(reps, iters, b, alpha):
@@ -251,10 +250,10 @@ def main(reps, iters, b, alpha):
     MOMENTUM = 0.9
 
     if torch.cuda.is_available():
-        device = torch.device('cuda:0')
+        device = torch.device("cuda:0")
         kwargs = dict(num_workers=4, pin_memory=True)
     else:
-        device = torch.device('cpu')
+        device = torch.device("cpu")
         kwargs = {}
     accs = defaultdict(list)
     template = f"b_{b}_alpha_{alpha}"
@@ -268,11 +267,12 @@ def main(reps, iters, b, alpha):
     train, pool = stratified_partition(train, 10, 20)
     pool, val = torchdata.random_split(pool, (len(pool) - VAL_LEN, VAL_LEN))
     pool = UnlabelledDataset(pool)
-    val_loader = torchdata.DataLoader(
-        val, batch_size=512, shuffle=False, **kwargs
-    )
+    val_loader = torchdata.DataLoader(val, batch_size=512, shuffle=False, **kwargs)
     test_loader = torchdata.DataLoader(
-        test, batch_size=512, shuffle=False, **kwargs,
+        test,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
 
     for r in range(1, reps + 1):
@@ -286,33 +286,43 @@ def main(reps, iters, b, alpha):
             model.reset_weights()
             # because in each iteration, we modify the learning rate.
             optimiser = torch.optim.SGD(
-                model.parameters(), lr=LR,
+                model.parameters(),
+                lr=LR,
                 momentum=MOMENTUM,
                 weight_decay=DECAY,
             )
             train_loader = torchdata.DataLoader(
-                dm.labelled, batch_size=BATCH_SIZE,
+                dm.labelled,
+                batch_size=BATCH_SIZE,
                 sampler=RandomFixedLengthSampler(dm.labelled, RFLS, shuffle=True),
                 **kwargs,
             )
             with timeop() as t:
                 history = train_model(
-                    model, F.nll_loss, optimiser,
-                    device, alpha, train_loader, val_loader,
-                    patience=PATIENCE, epochs=EPOCHS
+                    model,
+                    F.nll_loss,
+                    optimiser,
+                    device,
+                    alpha,
+                    train_loader,
+                    val_loader,
+                    patience=PATIENCE,
+                    epochs=EPOCHS,
                 )
             test_acc, test_loss = evaluate_model(
                 test_loader, model, F.nll_loss, device=device
             )
             accs[dm.n_labelled].append(test_acc)
-            print(f"\ttrain: {dm.n_labelled}; pool: {dm.n_unlabelled}\n"
-                  f"\t[test] acc, loss = {test_acc}, {test_loss}; time taken: {t}")
+            print(
+                f"\ttrain: {dm.n_labelled}; pool: {dm.n_unlabelled}\n"
+                f"\t[test] acc, loss = {test_acc}, {test_loss}; time taken: {t}"
+            )
 
             # save stuff
             with open(metrics / f"rep_{r}_iter_{i}.pkl", "wb") as fp:
                 payload = {
-                    'test_metrics': (test_acc, test_loss),
-                    'history': history,
+                    "test_metrics": (test_acc, test_loss),
+                    "history": history,
                 }
                 pickle.dump(payload, fp)
             if i % 2 == 0:
@@ -321,10 +331,23 @@ def main(reps, iters, b, alpha):
             # test and pool calib metrics
             with dm.unlabelled.tmp_debug():
                 pool_loader = torchdata.DataLoader(
-                    dm.unlabelled, batch_size=512, shuffle=False, **kwargs,
+                    dm.unlabelled,
+                    batch_size=512,
+                    shuffle=False,
+                    **kwargs,
                 )
-                calib_metrics(pool_loader, model, calib / "pool" / f"rep_{r}" / f"iter_{i}", device=device)
-            calib_metrics(test_loader, model, calib / "test" / f"rep_{r}" / f"iter_{i}", device=device)
+                calib_metrics(
+                    pool_loader,
+                    model,
+                    calib / "pool" / f"rep_{r}" / f"iter_{i}",
+                    device=device,
+                )
+            calib_metrics(
+                test_loader,
+                model,
+                calib / "test" / f"rep_{r}" / f"iter_{i}",
+                device=device,
+            )
 
             dm.acquire(b)
 
@@ -333,30 +356,37 @@ def main(reps, iters, b, alpha):
                 pickle.dump(accs, fp)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # don't regularise the loss (at least, not yet.)
     # use argparse for alpha in: 0.1, 0.2, 0.3, 0.4, 1.0
     args = argparse.ArgumentParser()
     args.add_argument(
-        "--reps", type=int,
-        help="# of repetitions [default = 1]", default=1,
+        "--reps",
+        type=int,
+        help="# of repetitions [default = 1]",
+        default=1,
     )
     args.add_argument(
-        "--iters", type=int,
-        help="# of iterations [default = 399]", default=399,
+        "--iters",
+        type=int,
+        help="# of iterations [default = 399]",
+        default=399,
     )
     args.add_argument(
-        "--mixup_alpha", type=float,
+        "--mixup_alpha",
+        type=float,
         help="mixup's alpha parameter",
     )
     args.add_argument(
-        "--acquisition_size", type=int,
-        help="batch acquisition size", default=10,
+        "--acquisition_size",
+        type=int,
+        help="batch acquisition size",
+        default=10,
     )
     args = args.parse_args()
     main(
         reps=args.reps,
         iters=args.iters,
         b=args.acquisition_size,
-        alpha=args.mixup_alpha
+        alpha=args.mixup_alpha,
     )

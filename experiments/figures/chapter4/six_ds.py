@@ -9,7 +9,10 @@ from matplotlib import cm
 import numpy as np
 from alr.utils import savefig
 
-root = Path("/Users/harry/Documents/workspace/thesis/experiments/vanilla_repeated_acquisition/mnist/reconsider/more_iters_diff_dataset")
+root = Path(
+    "/Users/harry/Documents/workspace/thesis/experiments/vanilla_repeated_acquisition/mnist/reconsider/more_iters_diff_dataset"
+)
+
 
 def plot(dic, label):
     x = list(dic.keys())
@@ -17,8 +20,9 @@ def plot(dic, label):
     median = np.median(y, axis=-1)
     top = np.percentile(y, 75, axis=-1)
     btm = np.percentile(y, 25, axis=-1)
-    l, = plt.plot(x, median, label=label)
-    plt.fill_between(x, btm, top, color=l.get_color(), alpha=.2)
+    (l,) = plt.plot(x, median, label=label)
+    plt.fill_between(x, btm, top, color=l.get_color(), alpha=0.2)
+
 
 with open(root / "no_al_b=10_thresh=0.9_accs.pkl", "rb") as fp:
     data = pickle.load(fp)

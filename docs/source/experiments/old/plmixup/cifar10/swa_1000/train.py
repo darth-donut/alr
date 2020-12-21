@@ -20,10 +20,8 @@ BATCH_SIZE = 100
 MIN_LABEL_PROP = 16
 RFLS_LEN = 20_000
 VAL_SIZE = 5_000
-OPTIM = 'SGD'
-OPTIM_KWARGS = dict(
-    lr=0.1, momentum=0.9, weight_decay=1e-4
-)
+OPTIM = "SGD"
+OPTIM_KWARGS = dict(lr=0.1, momentum=0.9, weight_decay=1e-4)
 EPOCHS_INITIAL = 10
 EPOCHS_FULL = 400
 # reset optimiser between stage 1 and 2
@@ -51,19 +49,16 @@ def evaluate(model, loader):
         for x, y in loader:
             x, y = _map_device([x, y], device)
             preds = model(x)
-            correct += torch.eq(
-                preds.argmax(dim=-1), y.argmax(dim=-1)
-            ).float().sum()
+            correct += torch.eq(preds.argmax(dim=-1), y.argmax(dim=-1)).float().sum()
             total += y.size(0)
     return correct / total
 
 
 # from https://github.com/facebookresearch/mixup-cifar10/blob/master/train.py#L119
-def mixup(x: torch.Tensor,
-          y: torch.Tensor,
-          alpha: float = 1.0,
-          device: _DeviceType = None):
-    '''Returns mixed inputs, pairs of targets, and lambda'''
+def mixup(
+    x: torch.Tensor, y: torch.Tensor, alpha: float = 1.0, device: _DeviceType = None
+):
+    """Returns mixed inputs, pairs of targets, and lambda"""
     if alpha > 0:
         lam = np.random.beta(alpha, alpha)
     else:
@@ -77,9 +72,8 @@ def mixup(x: torch.Tensor,
     return mixed_x, y_a, y_b, lam
 
 
-def reg_nll_loss(coef: Optional[Tuple[float, float]] = (.8, .4)):
-    def _reg_nll_loss(pred: torch.Tensor,
-                      target: torch.Tensor):
+def reg_nll_loss(coef: Optional[Tuple[float, float]] = (0.8, 0.4)):
+    def _reg_nll_loss(pred: torch.Tensor, target: torch.Tensor):
         C = target.size(-1)
         prob = pred.exp()
         # heuristic: empirical mean of mini-batch
@@ -88,30 +82,23 @@ def reg_nll_loss(coef: Optional[Tuple[float, float]] = (.8, .4)):
         prior = target.new_ones(C) / C
 
         # standard cross entropy loss: H[target, pred]
-        ce_loss = -torch.mean(
-            torch.sum(target * pred, dim=1)
-        )
+        ce_loss = -torch.mean(torch.sum(target * pred, dim=1))
         # prior loss: KL(prior || empirical mean) = sum c=1..C of prior * log[prior/emp. mean]
         # note, this is simplified, the full prior loss is:
         #  sum(prior * log[prior] - prior * log[prob_avg])
         # but since the first term is a constant, we drop it.
-        prior_loss = -torch.sum(
-            prior * torch.log(prob_avg)
-        )
+        prior_loss = -torch.sum(prior * torch.log(prob_avg))
         # entropy loss: neg. mean of sum c=1..C of p(y=c|x)log[p(y=c|x)]
-        entropy_loss = -torch.mean(
-            torch.sum(prob * pred, dim=1)
-        )
+        entropy_loss = -torch.mean(torch.sum(prob * pred, dim=1))
         return ce_loss + coef[0] * prior_loss + coef[1] * entropy_loss
 
     return _reg_nll_loss
 
 
-def reg_mixup_loss(coef: Optional[Tuple[float, float]] = (.8, .4)):
-    def _reg_mixup_loss(pred: torch.Tensor,
-                        y1: torch.Tensor,
-                        y2: torch.Tensor,
-                        lamb: int):
+def reg_mixup_loss(coef: Optional[Tuple[float, float]] = (0.8, 0.4)):
+    def _reg_mixup_loss(
+        pred: torch.Tensor, y1: torch.Tensor, y2: torch.Tensor, lamb: int
+    ):
         """
         pred is log_softmax,
         y1 and y2 are softmax probabilities
@@ -129,12 +116,8 @@ def reg_mixup_loss(coef: Optional[Tuple[float, float]] = (.8, .4)):
         term2 = -torch.mean(torch.sum(y2 * pred, dim=1))
         mixup_loss = lamb * term1 + (1 - lamb) * term2
 
-        prior_loss = -torch.sum(
-            prior * torch.log(prob_avg)
-        )
-        entropy_loss = -torch.mean(
-            torch.sum(prob * pred, dim=1)
-        )
+        prior_loss = -torch.sum(prior * torch.log(prob_avg))
+        entropy_loss = -torch.mean(torch.sum(prob * pred, dim=1))
 
         return mixup_loss + coef[0] * prior_loss + coef[1] * entropy_loss
 
@@ -147,7 +130,7 @@ class Net(nn.Module):
     CNN from Mean Teacher paper
     """
 
-    def __init__(self, num_classes=10, dropRatio=.5):
+    def __init__(self, num_classes=10, dropRatio=0.5):
         super(Net, self).__init__()
 
         self.activation = nn.LeakyReLU(0.1)
@@ -199,22 +182,28 @@ class Net(nn.Module):
         return F.log_softmax(self.fc1(x), dim=-1)
 
 
-train_transform = tv.transforms.Compose([
-    tv.transforms.ToTensor(),
-    tv.transforms.Normalize((0.4914, 0.4822, 0.4465),
-                            (0.2023, 0.1994, 0.2010)),
-])
-test_transform = tv.transforms.Compose([
-    tv.transforms.ToTensor(),
-    tv.transforms.Normalize((0.4914, 0.4822, 0.4465),
-                            (0.2023, 0.1994, 0.2010)),
-])
-data_augmentation = tv.transforms.Compose([
-    tv.transforms.Pad(2, padding_mode='reflect'),
-    tv.transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
-    tv.transforms.RandomCrop(32),
-    tv.transforms.RandomHorizontalFlip(),
-])
+train_transform = tv.transforms.Compose(
+    [
+        tv.transforms.ToTensor(),
+        tv.transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    ]
+)
+test_transform = tv.transforms.Compose(
+    [
+        tv.transforms.ToTensor(),
+        tv.transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    ]
+)
+data_augmentation = tv.transforms.Compose(
+    [
+        tv.transforms.Pad(2, padding_mode="reflect"),
+        tv.transforms.ColorJitter(
+            brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1
+        ),
+        tv.transforms.RandomCrop(32),
+        tv.transforms.RandomHorizontalFlip(),
+    ]
+)
 
 
 def onehot_transform(n):
@@ -225,15 +214,23 @@ def onehot_transform(n):
 
 
 cifar_train = tv.datasets.CIFAR10(
-    root="data", train=True,  # leave transform for PDS
-    download=True, target_transform=onehot_transform(10),
+    root="data",
+    train=True,  # leave transform for PDS
+    download=True,
+    target_transform=onehot_transform(10),
 )
 cifar_test = tv.datasets.CIFAR10(
-    root="data", train=False, transform=test_transform,
-    download=True, target_transform=onehot_transform(10),
+    root="data",
+    train=False,
+    transform=test_transform,
+    download=True,
+    target_transform=onehot_transform(10),
 )
 test_loader = torchdata.DataLoader(
-    cifar_test, shuffle=False, batch_size=512, **kwargs,
+    cifar_test,
+    shuffle=False,
+    batch_size=512,
+    **kwargs,
 )
 
 
@@ -254,10 +251,12 @@ class IndexMarker(torchdata.Dataset):
 
 
 class PDS(torchdata.Dataset):
-    def __init__(self,
-                 dataset: IndexMarker,
-                 transform: Callable[[torch.Tensor], torch.Tensor],
-                 augmentation: Optional[Callable[[torch.Tensor], torch.Tensor]] = None):
+    def __init__(
+        self,
+        dataset: IndexMarker,
+        transform: Callable[[torch.Tensor], torch.Tensor],
+        augmentation: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+    ):
         self.dataset = dataset
         self._augmentation = augmentation
         self._transform = transform
@@ -310,8 +309,12 @@ class PDS(torchdata.Dataset):
         for i in range(len(self)):
             overridden_target = self._new_targets[i]
             original_target = self.dataset[i][0][-1]
-            correct += (overridden_target.argmax(dim=-1).item() == original_target.argmax(dim=-1).item())
+            correct += (
+                overridden_target.argmax(dim=-1).item()
+                == original_target.argmax(dim=-1).item()
+            )
         return correct / len(self)
+
 
 train, pool = stratified_partition(cifar_train, 10, size=1000)
 pool, val = torchdata.random_split(pool, (len(pool) - VAL_SIZE, VAL_SIZE))
@@ -321,7 +324,7 @@ model = Net(dropRatio=DROPOUT).to(device)
 optimiser = getattr(torch.optim, OPTIM)(model.parameters(), **OPTIM_KWARGS)
 optimiser_init_state = copy.deepcopy(optimiser.state_dict())
 scheduler = torch.optim.lr_scheduler.MultiStepLR(
-    optimiser, milestones=[250, 350], gamma=.1
+    optimiser, milestones=[250, 350], gamma=0.1
 )
 val = PDS(IndexMarker(val, mark=None), transform=test_transform, augmentation=None)
 val._with_metadata = False
@@ -329,13 +332,16 @@ val._with_metadata = False
 print("Stage 1")
 with train.no_fluff():
     train_loader = torchdata.DataLoader(
-        train, batch_size=BATCH_SIZE,
+        train,
+        batch_size=BATCH_SIZE,
         sampler=RandomFixedLengthSampler(train, RFLS_LEN, shuffle=True),
-        **kwargs
+        **kwargs,
     )
     val_loader = torchdata.DataLoader(
-        val, batch_size=512,
-        shuffle=False, **kwargs,
+        val,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     for e in range(1, EPOCHS_INITIAL + 1):
         print(f"Epoch {e}/{EPOCHS_INITIAL}")
@@ -348,8 +354,9 @@ with train.no_fluff():
             loss.backward()
             optimiser.step()
             if i % LOG_EVERY == 0:
-                print(f"\tIteration {i}/{len(train_loader)}:"
-                      f" loss = {loss.item():.4f}")
+                print(
+                    f"\tIteration {i}/{len(train_loader)}:" f" loss = {loss.item():.4f}"
+                )
         print(f"\tval_acc = {evaluate(model, val_loader)}")
 
 print(f"Stage 1 over, test acc = {evaluate(model, test_loader)}")
@@ -357,12 +364,11 @@ print(f"Stage 1 over, test acc = {evaluate(model, test_loader)}")
 if RESET_OPTIM:
     optimiser.load_state_dict(optimiser_init_state)
 if USE_SWA:
-    optimiser = SWA(optimiser, swa_lr=swa_params['swa_lr'])
+    optimiser = SWA(optimiser, swa_lr=swa_params["swa_lr"])
 
 # pseudo-label pool
 pool = PDS(
-    IndexMarker(pool,
-                mark=IndexMarker.PSEUDO_LABELLED),
+    IndexMarker(pool, mark=IndexMarker.PSEUDO_LABELLED),
     transform=train_transform,
     augmentation=data_augmentation,
 )
@@ -370,7 +376,9 @@ pool = PDS(
 with pool.no_augmentation():
     with pool.no_fluff():
         pool_loader = torchdata.DataLoader(
-            pool, batch_size=512, shuffle=False,
+            pool,
+            batch_size=512,
+            shuffle=False,
             **kwargs,
         )
         pseudo_labels = []
@@ -382,9 +390,7 @@ with pool.no_augmentation():
                 pseudo_labels.append(model(x).exp().detach().cpu())
 
 # update pseudo-labels
-pool.override_targets(
-    torch.cat(pseudo_labels)
-)
+pool.override_targets(torch.cat(pseudo_labels))
 
 print(f"Overridden label's accuracy = {pool.override_accuracy:.4f}")
 
@@ -392,9 +398,14 @@ print(f"Overridden label's accuracy = {pool.override_accuracy:.4f}")
 full_dataset = torchdata.ConcatDataset((train, pool))
 
 fds_loader = torchdata.DataLoader(
-    full_dataset, batch_sampler=MinLabelledSampler(
-        train, pool, batch_size=BATCH_SIZE, min_labelled=MIN_LABEL_PROP,
-    ), **kwargs,
+    full_dataset,
+    batch_sampler=MinLabelledSampler(
+        train,
+        pool,
+        batch_size=BATCH_SIZE,
+        min_labelled=MIN_LABEL_PROP,
+    ),
+    **kwargs,
 )
 
 print("Stage 2")
@@ -402,11 +413,9 @@ pseudo_labels = torch.empty(size=(len(pool), 10))
 for e in range(1, EPOCHS_FULL + 1):
     print(f"Epoch {e}/{EPOCHS_FULL}")
     for i, (img_raw, img_aug, target, idx, mark) in enumerate(fds_loader, 1):
-        img_raw, img_aug, target, idx, mark = \
-            _map_device(
-                [img_raw, img_aug, target, idx, mark],
-                device
-            )
+        img_raw, img_aug, target, idx, mark = _map_device(
+            [img_raw, img_aug, target, idx, mark], device
+        )
         # train
         model.train()
         xp, y1, y2, lamb = mixup(img_aug, target, alpha=ALPHA)
@@ -427,14 +436,13 @@ for e in range(1, EPOCHS_FULL + 1):
             pseudo_labels[idx[pld_mask]] = new_pld
 
         if i % LOG_EVERY == 0:
-            print(f"\tIteration {i}/{len(fds_loader)}:"
-                  f" loss = {loss.item():.4f}")
+            print(f"\tIteration {i}/{len(fds_loader)}:" f" loss = {loss.item():.4f}")
     pool.override_targets(pseudo_labels)
     print(f"Overridden label's accuracy = {pool.override_accuracy:.4f}")
     scheduler.step()
     print(f"\tval_acc = {evaluate(model, val_loader)}")
     if USE_SWA:
-        if e > swa_params['swa_start'] and e % swa_params['swa_freq'] == 0:
+        if e > swa_params["swa_start"] and e % swa_params["swa_freq"] == 0:
             optimiser.update_swa()
 
 if USE_SWA:

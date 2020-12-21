@@ -17,21 +17,23 @@ from torch import nn
 import numpy as np
 import random
 
+
 def save_rnd_state(prefix):
     with open(prefix + "_state.pkl", "wb") as fp:
         payload = {
-            'numpy': np.random.get_state(),
-            'torch': torch.get_rng_state(),
-            'rand': random.getstate()
+            "numpy": np.random.get_state(),
+            "torch": torch.get_rng_state(),
+            "rand": random.getstate(),
         }
         pickle.dump(payload, fp)
+
 
 def load_rnd_state(prefix):
     with open(prefix + "_state.pkl", "rb") as fp:
         payload = pickle.load(fp)
-    np.random.set_state(payload['numpy'])
-    torch.set_rng_state(payload['torch'])
-    random.setstate(payload['rand'])
+    np.random.set_state(payload["numpy"])
+    torch.set_rng_state(payload["torch"])
+    random.setstate(payload["rand"])
 
 
 def make_imbalanced_pool(dataset: torchdata.Dataset, classes, n):
@@ -48,8 +50,7 @@ def make_imbalanced_pool(dataset: torchdata.Dataset, classes, n):
     return torchdata.Subset(dataset, idxs)
 
 
-def uneven_split(dataset: torchdata.Dataset,
-                 mapping: dict) -> tuple:
+def uneven_split(dataset: torchdata.Dataset, mapping: dict) -> tuple:
     count = {k: v for k, v in mapping.items()}
     original_idxs = set(range(len(dataset)))
     idxs = []
@@ -60,9 +61,7 @@ def uneven_split(dataset: torchdata.Dataset,
         if count[y]:
             count[y] -= 1
             idxs.append(idx)
-    return torchdata.Subset(
-        dataset, idxs
-    ), torchdata.Subset(
+    return torchdata.Subset(dataset, idxs), torchdata.Subset(
         dataset, list(original_idxs - set(idxs))
     )
 
@@ -80,23 +79,16 @@ class Net(ALRModel):
 def calc_calib_metrics(loader, model: nn.Module, log_dir, device):
     if log_dir.exists():
         return
-    evaluator = create_supervised_evaluator(
-        model, metrics=None, device=device
-    )
+    evaluator = create_supervised_evaluator(model, metrics=None, device=device)
     pds = PLPredictionSaver(log_dir)
     pds.attach(evaluator)
     evaluator.run(loader)
 
 
-def main(seed: int,
-         alpha: float,
-         b: int,
-         augment: bool,
-         metrics_path: str,
-         every: int):
+def main(seed: int, alpha: float, b: int, augment: bool, metrics_path: str, every: int):
     acq_name = "lastKL"
     print(f"Starting experiment with seed {seed}, augment = {augment} ...")
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     # ========= CONSTANTS ===========
@@ -143,14 +135,17 @@ def main(seed: int,
     manual_seed(seed)
     pool = UnlabelledDataset(pool)
     test_loader = torchdata.DataLoader(
-        test, batch_size=512, shuffle=False, **kwargs,
+        test,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
-    train_transform = test_transform = tv.transforms.Compose([
-        tv.transforms.ToTensor(),
-        tv.transforms.Normalize(
-            *Dataset.CIFAR10.normalisation_params
-        ),
-    ])
+    train_transform = test_transform = tv.transforms.Compose(
+        [
+            tv.transforms.ToTensor(),
+            tv.transforms.Normalize(*Dataset.CIFAR10.normalisation_params),
+        ]
+    )
     if augment:
         data_augmentation = Dataset.CIFAR10.get_augmentation
     else:
@@ -158,16 +153,20 @@ def main(seed: int,
     accs = defaultdict(list)
 
     root = Path(metrics_path) / f"lastKL_20_alpha_0.4_aug_{seed}"
-    files = sorted(list(root.glob("rep_1*.pkl")), key=lambda x: int(str(x).split("_")[-1][:-4]))
+    files = sorted(
+        list(root.glob("rep_1*.pkl")), key=lambda x: int(str(x).split("_")[-1][:-4])
+    )
     indices = []
     for f in files:
         with open(f, "rb") as fp:
-            indices.append(pickle.load(fp)['labelled_indices'])
+            indices.append(pickle.load(fp)["labelled_indices"])
     indices = indices[::every] + [indices[-1]]
     # let the for loop iterate + 1 more to evaluate the final 'indices'
     indices.append([])
 
-    template = f"{acq_name}_{b}_alpha_{alpha}" + ("_aug" if augment else "") + f"_{seed}"
+    template = (
+        f"{acq_name}_{b}_alpha_{alpha}" + ("_aug" if augment else "") + f"_{seed}"
+    )
     metrics = Path("metrics") / template
     calib_metrics = Path("calib_metrics") / template
     saved_models = Path("saved_models") / template
@@ -191,7 +190,7 @@ def main(seed: int,
         with open(template + "_chkpt.pkl", "rb") as fp:
             start_idx = pickle.load(fp) + 1
         print(f"Resuming from iteration {start_idx}")
-        indices = indices[(start_idx-1):]
+        indices = indices[(start_idx - 1) :]
         load_rnd_state(template)
 
     if Path(template + "_accs.pkl").exists():
@@ -199,33 +198,38 @@ def main(seed: int,
         with open(template + "_accs.pkl", "rb") as fp:
             accs = pickle.load(fp)
 
-
     for i, idx in enumerate(indices, start_idx):
         model.reset_weights()
         trainer = PLMixupTrainer(
-            model, 'SGD', train_transform, test_transform,
-            {'lr': .1, 'momentum': .9, 'weight_decay': 1e-4},
-            kwargs, log_dir=None,
-            rfls_length=MIN_TRAIN_LENGTH, alpha=alpha,
+            model,
+            "SGD",
+            train_transform,
+            test_transform,
+            {"lr": 0.1, "momentum": 0.9, "weight_decay": 1e-4},
+            kwargs,
+            log_dir=None,
+            rfls_length=MIN_TRAIN_LENGTH,
+            alpha=alpha,
             min_labelled=MIN_LABELLED,
             data_augmentation=data_augmentation,
             batch_size=BATCH_SIZE,
-            patience=PATIENCE, lr_patience=LR_PATIENCE,
-            device=device
+            patience=PATIENCE,
+            lr_patience=LR_PATIENCE,
+            device=device,
         )
         with pool.tmp_debug():
             with timeop() as t:
-                history = trainer.fit(
-                    train, val, pool, epochs=EPOCHS
-                )
+                history = trainer.fit(train, val, pool, epochs=EPOCHS)
 
         # eval
         test_metrics = trainer.evaluate(test_loader)
         print(f"=== Iteration {i} of {len(full_idxs)} ({i / len(full_idxs):.2%}) ===")
-        print(f"\ttrain: {len(train)}; val: {len(val)}; "
-              f"pool: {len(pool)}; test: {len(test)}")
+        print(
+            f"\ttrain: {len(train)}; val: {len(val)}; "
+            f"pool: {len(pool)}; test: {len(test)}"
+        )
         print(f"\t[test] acc: {test_metrics['acc']:.4f}, time: {t}")
-        accs[len(train)].append(test_metrics['acc'])
+        accs[len(train)].append(test_metrics["acc"])
 
         # save stuff
 
@@ -233,24 +237,29 @@ def main(seed: int,
         with pool.tmp_debug():
             pool_loader = torchdata.DataLoader(
                 temp_ds_transform(test_transform, with_targets=True)(pool),
-                batch_size=512, shuffle=False,
+                batch_size=512,
+                shuffle=False,
                 **kwargs,
             )
             calc_calib_metrics(
-                pool_loader, model, calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
-                device=device
+                pool_loader,
+                model,
+                calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
+                device=device,
             )
         calc_calib_metrics(
-            test_loader, model, calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
-            device=device
+            test_loader,
+            model,
+            calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
+            device=device,
         )
 
         with open(metrics / f"rep_{r}_iter_{i}.pkl", "wb") as fp:
             payload = {
-                'history': history,
-                'test_metrics': test_metrics,
-                'labelled_classes': pool.labelled_classes,
-                'labelled_indices': pool.labelled_indices,
+                "history": history,
+                "test_metrics": test_metrics,
+                "labelled_classes": pool.labelled_classes,
+                "labelled_indices": pool.labelled_indices,
             }
             pickle.dump(payload, fp)
         # torch.save(model.state_dict(), saved_models / f"rep_{r}_iter_{i}.pt")
@@ -274,14 +283,13 @@ def main(seed: int,
             # END: critical section
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     import argparse
 
     args = argparse.ArgumentParser()
     args.add_argument("--seed", type=int, default=42)
     args.add_argument("--alpha", type=float, default=0.4)
-    args.add_argument("--augment", action='store_true')
+    args.add_argument("--augment", action="store_true")
     args = args.parse_args()
 
     main(
@@ -292,4 +300,3 @@ if __name__ == '__main__':
         metrics_path="kl_metrics",
         every=2,
     )
-

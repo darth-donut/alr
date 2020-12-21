@@ -20,7 +20,7 @@ from alr.modules.dropout import replace_dropout, replace_consistent_dropout
 from alr.utils import range_progress_bar, progress_bar
 from alr.utils._type_aliases import _DeviceType
 
-__version__ = '0.0.0b8'
+__version__ = "0.0.0b8"
 
 
 @dataclass
@@ -34,7 +34,7 @@ class FitResult:
     val_loss: Union[np.ndarray, float, None] = None
     val_acc: Union[np.ndarray, float, None] = None
 
-    def reduce(self, op: str, inplace: Optional[bool] = False) -> 'FitResult':
+    def reduce(self, op: str, inplace: Optional[bool] = False) -> "FitResult":
         r"""
         Reduces the results according to `op`.
 
@@ -65,7 +65,7 @@ class FitResult:
 
 class ALRModel(nn.Module, ABC):
     # criterion is of type nn.Module, we wrap it so it wouldn't register in this module
-    _CompileParams = namedtuple('CompileParams', 'criterion optimiser')
+    _CompileParams = namedtuple("CompileParams", "criterion optimiser")
 
     def __init__(self):
         """
@@ -120,8 +120,11 @@ class ALRModel(nn.Module, ABC):
         # update snapshot
         self._snapshot = copy.deepcopy(self.state_dict())
 
-    def compile(self, criterion: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-                optimiser: torch.optim.Optimizer) -> None:
+    def compile(
+        self,
+        criterion: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+        optimiser: torch.optim.Optimizer,
+    ) -> None:
         r"""
         Compiles the model. Similar to Keras' API, the model saves the criterion
         and optimiser for use in :meth:`fit` later on.
@@ -136,12 +139,15 @@ class ALRModel(nn.Module, ABC):
         """
         self._compile_params = ALRModel._CompileParams(criterion, optimiser)
 
-    def fit(self, train_loader: torchdata.DataLoader,
-            train_acc: Optional[bool] = True,
-            val_loader: Optional[torchdata.DataLoader] = None,
-            epochs: Optional[int] = 1,
-            quiet: Optional[bool] = False,
-            device: _DeviceType = None) -> FitResult:
+    def fit(
+        self,
+        train_loader: torchdata.DataLoader,
+        train_acc: Optional[bool] = True,
+        val_loader: Optional[torchdata.DataLoader] = None,
+        epochs: Optional[int] = 1,
+        quiet: Optional[bool] = False,
+        device: _DeviceType = None,
+    ) -> FitResult:
         r"""
         A regular training loop much like Keras' fit function.
 
@@ -169,13 +175,21 @@ class ALRModel(nn.Module, ABC):
         training_acc = []
         validation_loss = []
         validation_acc = []
-        tepochs = range_progress_bar(epochs, desc="Epoch", leave=False) if not quiet else range(epochs)
+        tepochs = (
+            range_progress_bar(epochs, desc="Epoch", leave=False)
+            if not quiet
+            else range(epochs)
+        )
         for _ in tepochs:
             # beware: self.eval() resets the state when we call self.evaluate()
             self.train()
             e_training_loss = []
 
-            tbatch = progress_bar(train_loader, desc="Train batch", leave=False) if not quiet else train_loader
+            tbatch = (
+                progress_bar(train_loader, desc="Train batch", leave=False)
+                if not quiet
+                else train_loader
+            )
             # train
             for x, y in tbatch:
                 if device:
@@ -193,15 +207,15 @@ class ALRModel(nn.Module, ABC):
                 v_acc, v_loss = self.evaluate(val_loader, device=device)
                 validation_loss.append(v_loss)
                 validation_acc.append(v_acc)
-                pfix['val_loss'] = v_loss
-                pfix['val_acc'] = v_acc
+                pfix["val_loss"] = v_loss
+                pfix["val_acc"] = v_acc
             if train_acc:
                 t_acc, _ = self.evaluate(train_loader, device=device, quiet=quiet)
                 training_acc.append(t_acc)
-                pfix['train_acc'] = t_acc
+                pfix["train_acc"] = t_acc
 
             training_loss.append(np.mean(e_training_loss))
-            pfix['train_loss'] = training_loss[-1]
+            pfix["train_loss"] = training_loss[-1]
 
             # update tqdm
             if not quiet:
@@ -211,11 +225,15 @@ class ALRModel(nn.Module, ABC):
             train_loss=np.array(training_loss),
             train_acc=(np.array(training_acc) if train_acc else None),
             val_loss=(np.array(validation_loss) if val_loader else None),
-            val_acc=(np.array(validation_acc) if val_loader else None)
+            val_acc=(np.array(validation_acc) if val_loader else None),
         )
 
-    def evaluate(self, data: torchdata.DataLoader, quiet: Optional[bool] = False,
-                 device: _DeviceType = None) -> Tuple[float, float]:
+    def evaluate(
+        self,
+        data: torchdata.DataLoader,
+        quiet: Optional[bool] = False,
+        device: _DeviceType = None,
+    ) -> Tuple[float, float]:
         r"""
         Evaluate this model and return the mean accuracy and loss.
 
@@ -233,7 +251,11 @@ class ALRModel(nn.Module, ABC):
             raise RuntimeError("Compile must be invoked before evaluating model.")
         score = 0
         losses = []
-        tqdm_load = progress_bar(data, desc="Evaluating model", leave=False) if not quiet else data
+        tqdm_load = (
+            progress_bar(data, desc="Evaluating model", leave=False)
+            if not quiet
+            else data
+        )
         with torch.no_grad():
             for x, y in tqdm_load:
                 if device:
@@ -246,13 +268,16 @@ class ALRModel(nn.Module, ABC):
 
 
 class MCDropout(ALRModel):
-    def __init__(self, model: nn.Module,
-                 forward: Optional[int] = 100,
-                 reduce: Optional[str] = 'logsumexp',
-                 inplace: Optional[bool] = True,
-                 output_transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
-                 fast: Optional[bool] = False,
-                 consistent: Optional[bool] = False):
+    def __init__(
+        self,
+        model: nn.Module,
+        forward: Optional[int] = 100,
+        reduce: Optional[str] = "logsumexp",
+        inplace: Optional[bool] = True,
+        output_transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+        fast: Optional[bool] = False,
+        consistent: Optional[bool] = False,
+    ):
         r"""
         A wrapper that turns a regular PyTorch module into one that implements
         `Monte Carlo Dropout <https://arxiv.org/abs/1506.02142>`_ (Gal & Ghahramani, 2016).
@@ -286,7 +311,9 @@ class MCDropout(ALRModel):
         else:
             self.base_model = replace_dropout(model, inplace=inplace)
         self.n_forward = forward
-        self._output_transform = output_transform if output_transform is not None else lambda x: x
+        self._output_transform = (
+            output_transform if output_transform is not None else lambda x: x
+        )
         self._reduce = reduce.lower()
         assert self._reduce in {"logsumexp", "mean"}
         self._fast = fast
@@ -324,7 +351,9 @@ class MCDropout(ALRModel):
         if self._reduce == "mean":
             return torch.mean(self.stochastic_forward(x), dim=0)
         # if self._reduce == "logsumexp"
-        return torch.logsumexp(self.stochastic_forward(x), dim=0) - math.log(self.n_forward)
+        return torch.logsumexp(self.stochastic_forward(x), dim=0) - math.log(
+            self.n_forward
+        )
 
     def stochastic_forward(self, x: torch.Tensor) -> torch.Tensor:
         r"""
@@ -351,12 +380,17 @@ class MCDropout(ALRModel):
                 preds = self._output_transform(self.base_model(x))
                 preds = preds.view(self.n_forward, -1, *preds.size()[1:])
             except RuntimeError as e:
-                raise RuntimeError(r"Ran out of memory. Try reducing batch size or"
-                                   "reducing the number of MC dropout samples. Alternatively, switch off"
-                                   "fast MC dropout.") from e
+                raise RuntimeError(
+                    r"Ran out of memory. Try reducing batch size or"
+                    "reducing the number of MC dropout samples. Alternatively, switch off"
+                    "fast MC dropout."
+                ) from e
         else:
             preds = torch.stack(
-                [self._output_transform(self.base_model(x)) for _ in range(self.n_forward)]
+                [
+                    self._output_transform(self.base_model(x))
+                    for _ in range(self.n_forward)
+                ]
             )
         assert preds.size(0) == self.n_forward
         return preds
@@ -379,8 +413,9 @@ class MCDropout(ALRModel):
         try:
             out = x.repeat(n, *([1] * (x.ndim - 1)))
         except RuntimeError as e:
-            raise RuntimeError(r"Ran out of memory. Try reducing batch size or"
-                               "reducing the number of MC dropout samples. Alternatively, switch off"
-                               "fast MC dropout.") from e
+            raise RuntimeError(
+                r"Ran out of memory. Try reducing batch size or"
+                "reducing the number of MC dropout samples. Alternatively, switch off"
+                "fast MC dropout."
+            ) from e
         return out
-

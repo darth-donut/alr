@@ -31,7 +31,7 @@ for size in sizes:
     true_labels = torch.from_numpy(np.array(true_labels))
     with open(root / f"datum_{size}.pkl", "rb") as fp:
         data = pickle.load(fp)
-    hist = torch.from_numpy(data['label_hist'])
+    hist = torch.from_numpy(data["label_hist"])
     klass = hist.argmax(dim=-1)
     accs = []
     for h in [-2, -3, -4, -5, -6]:
@@ -39,10 +39,12 @@ for size in sizes:
     all_accs.append(accs)
 
 for accs, size in zip(all_accs, sizes):
-    plt.plot(accs, label=r"$|\mathcal{D}_{train}| = $" + str(size), marker='o')
+    plt.plot(accs, label=r"$|\mathcal{D}_{train}| = $" + str(size), marker="o")
 
 plt.legend()
 plt.ylabel("Proportion of samples with similar pseudo-label as history[T]")
 plt.xticks(range(5), [f"history[T - {i}]" for i in range(1, 6)])
-plt.title("Comparison of final pseudo-label (history[T])\nagainst the last five pseudo-labels in history")
+plt.title(
+    "Comparison of final pseudo-label (history[T])\nagainst the last five pseudo-labels in history"
+)
 savefig("/Users/harry/Documents/workspace/thesis/figures/4/ladi_vs_tbald_pl_acc.pdf")

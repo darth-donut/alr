@@ -5,8 +5,7 @@ import numpy as np
 import torch
 import torch.utils.data as torchdata
 from alr.training.progress_bar.ignite_progress_bar import ProgressBar
-from ignite.engine import Engine, Events, \
-    create_supervised_evaluator
+from ignite.engine import Engine, Events, create_supervised_evaluator
 from ignite.metrics import Loss, Accuracy
 from torch import nn
 
@@ -35,9 +34,14 @@ class WraparoundLoader:
 
 
 class Annealer:
-    def __init__(self, step: Optional[int] = 0,
-                 T1: Optional[int] = 100, T2: Optional[int] = 700,
-                 alpha: Optional[float] = 3.0, step_interval: Optional[int] = 50):
+    def __init__(
+        self,
+        step: Optional[int] = 0,
+        T1: Optional[int] = 100,
+        T2: Optional[int] = 700,
+        alpha: Optional[float] = 3.0,
+        step_interval: Optional[int] = 50,
+    ):
         self._step = step
         self._T1 = T1
         self._T2 = T2
@@ -58,8 +62,7 @@ class Annealer:
 
     def attach(self, engine: Engine):
         engine.add_event_handler(
-            Events.ITERATION_COMPLETED(every=self._step_interval),
-            self.step
+            Events.ITERATION_COMPLETED(every=self._step_interval), self.step
         )
 
 
@@ -75,7 +78,7 @@ def soft_nll_loss(preds: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         torch.Tensor: a singleton tensor with the loss value
     """
     # -1/N * sum_y p(y)log[p(y)]
-    res = cross_entropy(target, preds, mode='logsoftmax').sum(dim=1).mean()
+    res = cross_entropy(target, preds, mode="logsoftmax").sum(dim=1).mean()
     assert torch.isfinite(res)
     return res
 
@@ -92,18 +95,22 @@ def soft_cross_entropy(logits: torch.Tensor, target: torch.Tensor) -> torch.Tens
         torch.Tensor: a singleton tensor with the loss value
     """
     # -1/N * sum_y p(y)log[p(y)]
-    res = cross_entropy(target, logits, mode='logits').sum(dim=1).mean()
+    res = cross_entropy(target, logits, mode="logits").sum(dim=1).mean()
     assert torch.isfinite(res)
     return res
 
 
-def create_semisupervised_trainer(model: nn.Module, optimiser,
-                                  lloss_fn: _Loss_fn, uloss_fn: _Loss_fn,
-                                  annealer: Annealer,
-                                  train_iterable: WraparoundLoader,
-                                  pl_saver: Optional[PLPredictionSaver] = None,
-                                  use_soft_labels: bool = False,
-                                  device: _DeviceType = None):
+def create_semisupervised_trainer(
+    model: nn.Module,
+    optimiser,
+    lloss_fn: _Loss_fn,
+    uloss_fn: _Loss_fn,
+    annealer: Annealer,
+    train_iterable: WraparoundLoader,
+    pl_saver: Optional[PLPredictionSaver] = None,
+    use_soft_labels: bool = False,
+    device: _DeviceType = None,
+):
     def _step(_, batch):
         if isinstance(batch, (list, tuple)):
             # don't have to map targets to GPU since we're saving it immediately
@@ -140,30 +147,34 @@ def create_semisupervised_trainer(model: nn.Module, optimiser,
         loss.backward()
         optimiser.step()
         return loss.item(), raw_preds, targets
+
     e = Engine(_step)
     annealer.attach(e)
     if pl_saver is not None:
         pl_saver.attach(
-            e,
-            output_transform=lambda x: (x[1], x[2])  # (raw_preds, targets)
+            e, output_transform=lambda x: (x[1], x[2])  # (raw_preds, targets)
         )
     return e
 
 
 class VanillaPLTrainer:
-    def __init__(self, model: nn.Module,
-                 labelled_loss: _Loss_fn,
-                 unlabelled_loss: _Loss_fn,
-                 optimiser: str,
-                 use_soft_labels: Optional[bool] = False,
-                 patience: Optional[int] = None,
-                 reload_best: Optional[bool] = False,
-                 track_pl_metrics: Optional[str] = None,
-                 T1: Optional[int] = 0,
-                 T2: Optional[int] = 40,
-                 step_interval: Optional[int] = 50,
-                 device: _DeviceType = None,
-                 *args, **kwargs):
+    def __init__(
+        self,
+        model: nn.Module,
+        labelled_loss: _Loss_fn,
+        unlabelled_loss: _Loss_fn,
+        optimiser: str,
+        use_soft_labels: Optional[bool] = False,
+        patience: Optional[int] = None,
+        reload_best: Optional[bool] = False,
+        track_pl_metrics: Optional[str] = None,
+        T1: Optional[int] = 0,
+        T2: Optional[int] = 40,
+        step_interval: Optional[int] = 50,
+        device: _DeviceType = None,
+        *args,
+        **kwargs,
+    ):
         r"""
         A vanilla pseudo-label training object.
 
@@ -221,21 +232,26 @@ class VanillaPLTrainer:
         self._args = args
         self._kwargs = kwargs
 
-    def fit(self,
-            train_loader: torchdata.DataLoader,
-            pool_loader: torchdata.DataLoader,
-            val_loader: Optional[torchdata.DataLoader] = None,
-            epochs: Union[int, Sequence[int]] = 1) -> Dict[str, Dict[str, list]]:
-        if self._track_pl_metrics is not None and \
-                (not isinstance(pool_loader.dataset, UnlabelledDataset)
-                 or not pool_loader.dataset.debug):
+    def fit(
+        self,
+        train_loader: torchdata.DataLoader,
+        pool_loader: torchdata.DataLoader,
+        val_loader: Optional[torchdata.DataLoader] = None,
+        epochs: Union[int, Sequence[int]] = 1,
+    ) -> Dict[str, Dict[str, list]]:
+        if self._track_pl_metrics is not None and (
+            not isinstance(pool_loader.dataset, UnlabelledDataset)
+            or not pool_loader.dataset.debug
+        ):
             raise ValueError(
                 f"If track_pl_metrics is provided, then the dataset in pool_loader "
                 f"must be of the type UnlabelledDataset with debug on."
             )
 
         if self._patience and val_loader is None:
-            raise ValueError("If patience is specified, then val_loader must be provided in .fit().")
+            raise ValueError(
+                "If patience is specified, then val_loader must be provided in .fit()."
+            )
 
         if isinstance(epochs, int):
             epochs = (epochs, epochs)
@@ -246,47 +262,56 @@ class VanillaPLTrainer:
             save_pl_metrics = create_supervised_evaluator(
                 self._model, metrics=None, device=self._device
             )
-            pps = PLPredictionSaver(
-                log_dir=(self._track_pl_metrics + "/stage1")
-            )
+            pps = PLPredictionSaver(log_dir=(self._track_pl_metrics + "/stage1"))
             pps.attach(save_pl_metrics)
+
             def _save_pl_metrics(e: Engine):
                 # epoch should be read from the engine that's training
                 # the model, not the evaluator defined above.
                 pps.global_step_from_engine(e)
                 save_pl_metrics.run(pool_loader)
+
             callbacks = [_save_pl_metrics]
 
         # stage 1
         supervised_trainer = Trainer(
-            self._model, self._lloss, self._optim,
+            self._model,
+            self._lloss,
+            self._optim,
             patience=self._patience,
             reload_best=self._reload_best,
-            device=self._device, *self._args, **self._kwargs
+            device=self._device,
+            *self._args,
+            **self._kwargs,
         )
 
         # until convergence
         supervised_history = supervised_trainer.fit(
-            train_loader, val_loader, epochs=epoch1, callbacks=callbacks,
+            train_loader,
+            val_loader,
+            epochs=epoch1,
+            callbacks=callbacks,
         )
 
         # stage 2
         pl_history = defaultdict(list)
         pbar = ProgressBar(desc=lambda _: "Vanilla PL trainer")
         train_evaluator = create_supervised_evaluator(
-            self._model, metrics={'acc': Accuracy(), 'loss': Loss(self._lloss)},
-            device=self._device
+            self._model,
+            metrics={"acc": Accuracy(), "loss": Loss(self._lloss)},
+            device=self._device,
         )
         val_evaluator = create_supervised_evaluator(
-            self._model, metrics={'acc': Accuracy(), 'loss': Loss(self._lloss)},
-            device=self._device
+            self._model,
+            metrics={"acc": Accuracy(), "loss": Loss(self._lloss)},
+            device=self._device,
         )
 
         def _log_metrics(engine: Engine):
             # engine = ssl engine with `pl_tracker`
             metrics = train_evaluator.run(train_loader).metrics
-            pl_history["train_acc"].append(metrics['acc'])
-            pl_history["train_loss"].append(metrics['loss'])
+            pl_history["train_acc"].append(metrics["acc"])
+            pl_history["train_loss"].append(metrics["loss"])
             pbar.log_message(
                 f"epoch {engine.state.epoch}/{engine.state.max_epochs}\n"
                 f"\ttrain acc = {metrics['acc']}, train loss = {metrics['loss']}"
@@ -294,8 +319,8 @@ class VanillaPLTrainer:
             if val_loader is None:
                 return  # job done
             metrics = val_evaluator.run(val_loader).metrics
-            pl_history["val_acc"].append(metrics['acc'])
-            pl_history["val_loss"].append(metrics['loss'])
+            pl_history["val_acc"].append(metrics["acc"])
+            pl_history["val_loss"].append(metrics["loss"])
             pbar.log_message(
                 f"\tval acc = {metrics['acc']}, val loss = {metrics['loss']}"
             )
@@ -304,35 +329,51 @@ class VanillaPLTrainer:
             model=self._model,
             optimiser=getattr(torch.optim, self._optim)(
                 self._model.parameters(), *self._args, **self._kwargs
-            ), lloss_fn=self._lloss, uloss_fn=self._uloss,
-            annealer=Annealer(step=1, T1=self._T1, T2=self._T2, step_interval=self._step_interval),
+            ),
+            lloss_fn=self._lloss,
+            uloss_fn=self._uloss,
+            annealer=Annealer(
+                step=1, T1=self._T1, T2=self._T2, step_interval=self._step_interval
+            ),
             train_iterable=WraparoundLoader(train_loader),
-            pl_saver=(PLPredictionSaver(self._track_pl_metrics + "/stage2") if self._track_pl_metrics is not None else None),
+            pl_saver=(
+                PLPredictionSaver(self._track_pl_metrics + "/stage2")
+                if self._track_pl_metrics is not None
+                else None
+            ),
             use_soft_labels=self._use_soft_labels,
             device=self._device,
         )
         if val_loader is not None and self._patience:
-            es = EarlyStopper(self._model, patience=self._patience, trainer=ssl_trainer, key='acc', mode='max')
+            es = EarlyStopper(
+                self._model,
+                patience=self._patience,
+                trainer=ssl_trainer,
+                key="acc",
+                mode="max",
+            )
             es.attach(val_evaluator)
 
         ssl_trainer.add_event_handler(Events.EPOCH_COMPLETED, _log_metrics)
         pbar.attach(ssl_trainer)
 
         ssl_trainer.run(
-            pool_loader, max_epochs=epoch2,
+            pool_loader,
+            max_epochs=epoch2,
         )
 
         if val_loader is not None and self._patience and self._reload_best:
             es.reload_best()
 
         return {
-            'stage1': {k: np.array(v) for k, v in supervised_history.items()},
-            'stage2': {k: np.array(v) for k, v in pl_history.items()}
+            "stage1": {k: np.array(v) for k, v in supervised_history.items()},
+            "stage2": {k: np.array(v) for k, v in pl_history.items()},
         }
 
     def evaluate(self, data_loader: torchdata.DataLoader) -> dict:
         evaluator = create_supervised_evaluator(
-            self._model, metrics={'acc': Accuracy(), 'loss': Loss(self._lloss)},
-            device=self._device
+            self._model,
+            metrics={"acc": Accuracy(), "loss": Loss(self._lloss)},
+            device=self._device,
         )
         return evaluator.run(data_loader).metrics

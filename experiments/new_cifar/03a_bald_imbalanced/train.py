@@ -1,7 +1,12 @@
 # ENSEMBLE AL on CIFAR10, IMBALANCED 0, 4, 9 minority
 from alr.utils import manual_seed, eval_fwd_exp, timeop
 from alr.data.datasets import Dataset
-from alr.data import DataManager, UnlabelledDataset, TransformedDataset, disable_augmentation
+from alr.data import (
+    DataManager,
+    UnlabelledDataset,
+    TransformedDataset,
+    disable_augmentation,
+)
 from alr.acquisition import BALD, RandomAcquisition, _bald_score
 from alr.training import Trainer
 from alr.training.samplers import RandomFixedLengthSampler
@@ -32,9 +37,7 @@ def make_imbalanced_pool(dataset: torchdata.Dataset, classes, n):
     return torchdata.Subset(dataset, idxs)
 
 
-
-def uneven_split(dataset: torchdata.Dataset,
-                 mapping: dict) -> tuple:
+def uneven_split(dataset: torchdata.Dataset, mapping: dict) -> tuple:
     count = {k: v for k, v in mapping.items()}
     original_idxs = set(range(len(dataset)))
     idxs = []
@@ -45,12 +48,9 @@ def uneven_split(dataset: torchdata.Dataset,
         if count[y]:
             count[y] -= 1
             idxs.append(idx)
-    return torchdata.Subset(
-        dataset, idxs
-    ), torchdata.Subset(
+    return torchdata.Subset(dataset, idxs), torchdata.Subset(
         dataset, list(original_idxs - set(idxs))
     )
-
 
 
 class Ensemble:
@@ -95,9 +95,7 @@ class Ensemble:
 
 
 def calc_calib_metrics(loader, model, log_dir, device):
-    evaluator = create_supervised_evaluator(
-        model, metrics=None, device=device
-    )
+    evaluator = create_supervised_evaluator(model, metrics=None, device=device)
     pds = PLPredictionSaver(log_dir)
     pds.attach(evaluator)
     evaluator.run(loader)
@@ -105,7 +103,7 @@ def calc_calib_metrics(loader, model, log_dir, device):
 
 def main(acq_name, b, iters, repeats, seed, save_weights: bool):
     print(f"Seed: {seed}" + (", saving weights." if save_weights else ""))
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     # ========= CONSTANTS ===========
@@ -126,7 +124,7 @@ def main(acq_name, b, iters, repeats, seed, save_weights: bool):
     ]
     regular_transform = [
         tv.transforms.ToTensor(),
-        tv.transforms.Normalize(*Dataset.CIFAR10.normalisation_params)
+        tv.transforms.Normalize(*Dataset.CIFAR10.normalisation_params),
     ]
 
     manual_seed(42)
@@ -157,27 +155,30 @@ def main(acq_name, b, iters, repeats, seed, save_weights: bool):
     manual_seed(seed)
     # apply augmentation to train and pool only
     train = TransformedDataset(
-        train, transform=regular_transform,
-        augmentation=standard_augmentation
+        train, transform=regular_transform, augmentation=standard_augmentation
     )
     # when acquiring(scoring) points, we'll temporarily disable augmentation
     pool = UnlabelledDataset(
         TransformedDataset(
-            pool, transform=regular_transform,
-            augmentation=standard_augmentation
+            pool, transform=regular_transform, augmentation=standard_augmentation
         )
     )
     # no augmentation in validation set
     val = TransformedDataset(val, transform=regular_transform)
 
     val_loader = torchdata.DataLoader(
-        val, batch_size=512, shuffle=False, **kwargs,
+        val,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     test_loader = torchdata.DataLoader(
-        test, batch_size=512, shuffle=False, **kwargs,
+        test,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     accs = defaultdict(list)
-
 
     # ========== MISC =============
     template = f"{acq_name}_{b}_{seed}"
@@ -206,22 +207,33 @@ def main(acq_name, b, iters, repeats, seed, save_weights: bool):
                     print(f"\tTraining model {m + 1} of 5")
                     model = Dataset.CIFAR10.model.to(device)
                     trainer = Trainer(
-                        model, F.nll_loss, optimiser='Adam',
-                        patience=10, reload_best=True, device=device,
+                        model,
+                        F.nll_loss,
+                        optimiser="Adam",
+                        patience=10,
+                        reload_best=True,
+                        device=device,
                     )
                     train_loader = torchdata.DataLoader(
-                        dm.labelled, batch_size=BATCH_SIZE,
-                        sampler=RandomFixedLengthSampler(dm.labelled, MIN_TRAIN_LENGTH, shuffle=True),
-                        **kwargs
+                        dm.labelled,
+                        batch_size=BATCH_SIZE,
+                        sampler=RandomFixedLengthSampler(
+                            dm.labelled, MIN_TRAIN_LENGTH, shuffle=True
+                        ),
+                        **kwargs,
                     )
-                    histories.append(trainer.fit(train_loader, val_loader, epochs=EPOCHS))
+                    histories.append(
+                        trainer.fit(train_loader, val_loader, epochs=EPOCHS)
+                    )
                     models.append(model)
             # eval
             ensemble = Ensemble(models)
             test_acc = ensemble.evaluate(test_loader, device)
             print(f"=== Iteration {i} of {ITERS} ({i / ITERS:.2%}) ===")
-            print(f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
-                  f"pool: {dm.n_unlabelled}; test: {len(test)}")
+            print(
+                f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
+                f"pool: {dm.n_unlabelled}; test: {len(test)}"
+            )
             print(f"\t[test] acc: {test_acc}, time: {t}")
             accs[dm.n_labelled].append(test_acc)
 
@@ -230,26 +242,30 @@ def main(acq_name, b, iters, repeats, seed, save_weights: bool):
             with dm.unlabelled.tmp_debug():
                 pool_loader = torchdata.DataLoader(
                     disable_augmentation(dm.unlabelled),
-                    batch_size=512, shuffle=False,
+                    batch_size=512,
+                    shuffle=False,
                     **kwargs,
                 )
                 calc_calib_metrics(
-                    pool_loader, ensemble, calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
-                    device=device
+                    pool_loader,
+                    ensemble,
+                    calib_metrics / "pool" / f"rep_{r}" / f"iter_{i}",
+                    device=device,
                 )
             calc_calib_metrics(
-                test_loader, ensemble, calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
-                device=device
+                test_loader,
+                ensemble,
+                calib_metrics / "test" / f"rep_{r}" / f"iter_{i}",
+                device=device,
             )
 
             with open(metrics / f"rep_{r}_iter_{i}.pkl", "wb") as fp:
                 payload = {
-                    'history': histories,
-                    'test_metrics': test_acc,
-                    'labelled_classes': dm.unlabelled.labelled_classes,
-                    'labelled_indices': dm.unlabelled.labelled_indices,
-                    'bald_scores': bald_scores,
-
+                    "history": histories,
+                    "test_metrics": test_acc,
+                    "labelled_classes": dm.unlabelled.labelled_classes,
+                    "labelled_indices": dm.unlabelled.labelled_indices,
+                    "bald_scores": bald_scores,
                 }
                 pickle.dump(payload, fp)
 
@@ -262,7 +278,9 @@ def main(acq_name, b, iters, repeats, seed, save_weights: bool):
 
             ## ACQUIRE ##
             if acq_name == "bald":
-                acq_fn = BALD(ensemble.get_preds, device=device, batch_size=512, **kwargs)
+                acq_fn = BALD(
+                    ensemble.get_preds, device=device, batch_size=512, **kwargs
+                )
             elif acq_name == "random":
                 acq_fn = RandomAcquisition()
             else:
@@ -278,16 +296,23 @@ def main(acq_name, b, iters, repeats, seed, save_weights: bool):
                 bald_scores = (acquired_idxs, acq_fn.recent_score)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import argparse
 
     args = argparse.ArgumentParser()
-    args.add_argument("--acq", choices=['bald', 'random'], default='bald')
+    args.add_argument("--acq", choices=["bald", "random"], default="bald")
     args.add_argument("--b", default=10, type=int, help="Batch acq size (default = 10)")
     args.add_argument("--iters", default=199, type=int)
     args.add_argument("--reps", default=1, type=int)
     args.add_argument("--seed", type=int)
-    args.add_argument("--save", action='store_true')
+    args.add_argument("--save", action="store_true")
     args = args.parse_args()
 
-    main(args.acq, b=args.b, iters=args.iters, repeats=args.reps, seed=args.seed, save_weights=args.save)
+    main(
+        args.acq,
+        b=args.b,
+        iters=args.iters,
+        repeats=args.reps,
+        seed=args.seed,
+        save_weights=args.save,
+    )

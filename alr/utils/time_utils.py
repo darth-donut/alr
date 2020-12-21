@@ -11,6 +11,7 @@ from typing import Optional, Callable, List
 @dataclass
 class Elapsed:
     """Elapsed time in seconds"""
+
     seconds: Optional[float] = None
 
     @property
@@ -128,8 +129,11 @@ class Time(AbstractContextManager):
         if inspect.ismethod(fn):
             self._namespace = fn.__self__
             assert hasattr(self._namespace, fn.__name__)
-            setattr(self._namespace, fn.__name__,
-                    types.MethodType(self._timer(fn, is_method=True), fn.__self__))
+            setattr(
+                self._namespace,
+                fn.__name__,
+                types.MethodType(self._timer(fn, is_method=True), fn.__self__),
+            )
         elif inspect.isfunction(fn):
             # parent module
             mod = inspect.getmodule(inspect.stack()[2][0])
@@ -199,5 +203,3 @@ class Time(AbstractContextManager):
         :rtype: List[Elapsed]
         """
         return self._tape
-
-

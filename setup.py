@@ -12,13 +12,13 @@ try:
     with open(path.join(here, "README.md"), encoding="utf-8") as f:
         long_description = f.read()
 except:
-    long_description = ''
+    long_description = ""
 
 
 # get version from __init__.py
 def get_version(rel_path):
     for line in open(rel_path).read().splitlines():
-        if line.startswith('__version__'):
+        if line.startswith("__version__"):
             delim = '"' if '"' in line else "'"
             return line.split(delim)[1]
     else:
@@ -35,7 +35,6 @@ setup(
     # Fix windows newlines.
     long_description=long_description.replace("\r\n", "\n"),
     long_description_content_type="text/markdown",
-
     # The project's main homepage.
     url="https://github.com/jiahfong/alr",
     # Author details
@@ -69,14 +68,20 @@ setup(
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=["torch", "tqdm", "numpy", "torchvision", "pytorch-ignite==0.4.1"],
-
     # List additional groups of dependencies here (e.g. development
     # dependencies). You can install these using the following syntax,
     # for example:
     # $ pip install -e .[dev,test]
     extras_require={
         # "dev": ["check-manifest"],
-        "test": ["coverage", "codecov", "pytest", "pytest-benchmark", "pytest-cov", "pytest-forked"],
+        "test": [
+            "coverage",
+            "codecov",
+            "pytest",
+            "pytest-benchmark",
+            "pytest-cov",
+            "pytest-forked",
+        ],
     },
     # setup_requires=["pytest-runner"],
 )

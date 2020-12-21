@@ -26,18 +26,22 @@ from alr.utils._type_aliases import _DeviceType, _Loss_fn
 
 
 class PseudoLabelManager:
-    def __init__(self,
-                 pool: UnlabelledDataset,
-                 model: nn.Module,
-                 threshold: float,
-                 log_dir: Optional[str] = None,
-                 device: _DeviceType = None,
-                 **kwargs):
-        bs = kwargs.pop('batch_size', 1024)
-        shuffle = kwargs.pop('shuffle', False)
+    def __init__(
+        self,
+        pool: UnlabelledDataset,
+        model: nn.Module,
+        threshold: float,
+        log_dir: Optional[str] = None,
+        device: _DeviceType = None,
+        **kwargs,
+    ):
+        bs = kwargs.pop("batch_size", 1024)
+        shuffle = kwargs.pop("shuffle", False)
         assert not shuffle
         self._pool = pool
-        self._loader = torchdata.DataLoader(pool, batch_size=bs, shuffle=shuffle, **kwargs)
+        self._loader = torchdata.DataLoader(
+            pool, batch_size=bs, shuffle=shuffle, **kwargs
+        )
         self._model = model
         self._log_dir = log_dir
         self._device = device
@@ -50,24 +54,32 @@ class PseudoLabelManager:
         engine.add_event_handler(Events.ITERATION_COMPLETED, self._load_labels)
 
     def _load_labels(self, engine: Engine):
-        evaluator = create_supervised_evaluator(self._model, metrics=None, device=self._device)
+        evaluator = create_supervised_evaluator(
+            self._model, metrics=None, device=self._device
+        )
         plc = PseudoLabelCollector(
-            self._threshold, log_dir=self._log_dir,
+            self._threshold,
+            log_dir=self._log_dir,
         )
         plc.attach(evaluator, batch_size=self._loader.batch_size)
         plc.global_step_from_engine(engine)
         evaluator.run(self._loader)
-        indices, pseudo_labels = \
-            evaluator.state.pl_indices.cpu().numpy(), \
-            evaluator.state.pl_plabs.cpu().numpy()
+        indices, pseudo_labels = (
+            evaluator.state.pl_indices.cpu().numpy(),
+            evaluator.state.pl_plabs.cpu().numpy(),
+        )
         self.acquired_sizes.append(indices.shape[0])
         if indices.shape[0]:
             confident_points = torchdata.Subset(self._pool, indices)
             if self._pool.debug:
                 # pool returns target labels too
-                engine.state.pseudo_labelled_dataset = RelabelDataset(confident_points, pseudo_labels)
+                engine.state.pseudo_labelled_dataset = RelabelDataset(
+                    confident_points, pseudo_labels
+                )
             else:
-                engine.state.pseudo_labelled_dataset = PseudoLabelDataset(confident_points, pseudo_labels)
+                engine.state.pseudo_labelled_dataset = PseudoLabelDataset(
+                    confident_points, pseudo_labels
+                )
         else:
             engine.state.pseudo_labelled_dataset = None
 
@@ -77,10 +89,12 @@ class PseudoLabelManager:
 
 
 class PseudoLabelCollector:
-    def __init__(self,
-                 threshold: float,
-                 log_dir: Optional[str] = None,
-                 pred_transform: Callable[[torch.Tensor], torch.Tensor] = lambda x: x.exp()):
+    def __init__(
+        self,
+        threshold: float,
+        log_dir: Optional[str] = None,
+        pred_transform: Callable[[torch.Tensor], torch.Tensor] = lambda x: x.exp(),
+    ):
         self._indices = []
         self._plabs = []
         self._pred_transform = pred_transform
@@ -142,29 +156,48 @@ class PseudoLabelCollector:
             self._saver.global_step_from_engine(engine)
 
 
-def _update_dataloader(loader: torchdata.DataLoader,
-                       dataset: torchdata.Dataset,
-                       sampler: Optional[torchdata.Sampler] = None):
+def _update_dataloader(
+    loader: torchdata.DataLoader,
+    dataset: torchdata.Dataset,
+    sampler: Optional[torchdata.Sampler] = None,
+):
     # attributes that usually go in dataloader's constructor
-    attrs = [k for k in loader.__dict__.keys() if not k.startswith('_')]
-    drop = ['dataset', 'sampler', 'batch_sampler', 'dataset_kind']
+    attrs = [k for k in loader.__dict__.keys() if not k.startswith("_")]
+    drop = ["dataset", "sampler", "batch_sampler", "dataset_kind"]
     kwargs = {k: getattr(loader, k) for k in attrs if k not in drop}
-    if not isinstance(loader.sampler, (torchdata.SequentialSampler, torchdata.RandomSampler, RandomFixedLengthSampler)):
-        raise ValueError(f"Only sequential, random, and random fixed length samplers "
-                         f"are supported in _update_dataloader")
-    kwargs['dataset'] = dataset
+    if not isinstance(
+        loader.sampler,
+        (
+            torchdata.SequentialSampler,
+            torchdata.RandomSampler,
+            RandomFixedLengthSampler,
+        ),
+    ):
+        raise ValueError(
+            f"Only sequential, random, and random fixed length samplers "
+            f"are supported in _update_dataloader"
+        )
+    kwargs["dataset"] = dataset
     # Sequential and Random will be automatically determined if sampler is None (depending on shuffle)
-    kwargs['sampler'] = sampler
+    kwargs["sampler"] = sampler
     return torchdata.DataLoader(**kwargs)
 
 
-def create_pseudo_label_trainer(model: ALRModel, loss: _Loss_fn, optimiser: str,
-                                train_loader: torchdata.DataLoader, val_loader: torchdata.DataLoader,
-                                pseudo_label_manager: PseudoLabelManager,
-                                rfls_len: Optional[int] = None,
-                                patience: Optional[int] = None, reload_best: Optional[bool] = None,
-                                epochs: Optional[int] = 1, device: _DeviceType = None,
-                                *args, **kwargs):
+def create_pseudo_label_trainer(
+    model: ALRModel,
+    loss: _Loss_fn,
+    optimiser: str,
+    train_loader: torchdata.DataLoader,
+    val_loader: torchdata.DataLoader,
+    pseudo_label_manager: PseudoLabelManager,
+    rfls_len: Optional[int] = None,
+    patience: Optional[int] = None,
+    reload_best: Optional[bool] = None,
+    epochs: Optional[int] = 1,
+    device: _DeviceType = None,
+    *args,
+    **kwargs,
+):
     def _step(engine: Engine, _):
         # update loader accordingly: if pld is not none, concatenate them
         new_loader = train_loader
@@ -176,8 +209,9 @@ def create_pseudo_label_trainer(model: ALRModel, loss: _Loss_fn, optimiser: str,
             # update dataloader's dataset attribute
             if rfls_len:
                 new_loader = _update_dataloader(
-                    train_loader, train_ds,
-                    RandomFixedLengthSampler(train_ds, length=rfls_len, shuffle=True)
+                    train_loader,
+                    train_ds,
+                    RandomFixedLengthSampler(train_ds, length=rfls_len, shuffle=True),
                 )
             else:
                 new_loader = _update_dataloader(train_loader, train_ds)
@@ -185,35 +219,50 @@ def create_pseudo_label_trainer(model: ALRModel, loss: _Loss_fn, optimiser: str,
             assert engine.state.epoch == 1
 
         # begin supervised training
-        trainer = Trainer(model, loss, optimiser, patience, reload_best, device=device, *args, **kwargs)
+        trainer = Trainer(
+            model,
+            loss,
+            optimiser,
+            patience,
+            reload_best,
+            device=device,
+            *args,
+            **kwargs,
+        )
         history = trainer.fit(
-            new_loader, val_loader=val_loader,
+            new_loader,
+            val_loader=val_loader,
             epochs=epochs,
         )
 
         # if early stopping was applied w/ patience, then the actual train acc and loss should be
         # -patience from the final loss/acc UNLESS we reached the maximum number of epochs.
-        if patience and len(history['train_loss']) != epochs:
-            return history['train_loss'][-patience], history['train_acc'][-patience]
+        if patience and len(history["train_loss"]) != epochs:
+            return history["train_loss"][-patience], history["train_acc"][-patience]
         return history["train_loss"][-1], history["train_acc"][-1]
+
     e = Engine(_step)
     pseudo_label_manager.attach(e)
     return e
 
 
 class EphemeralTrainer:
-    def __init__(self,
-                 model: ALRModel,
-                 pool: UnlabelledDataset,
-                 loss: _Loss_fn, optimiser: str,
-                 threshold: float,
-                 random_fixed_length_sampler_length: Optional[int] = None,
-                 log_dir: Optional[str] = None,
-                 patience: Optional[int] = None,
-                 reload_best: Optional[bool] = False,
-                 device: _DeviceType = None,
-                 pool_loader_kwargs: Optional[dict] = {},
-                 *args, **kwargs):
+    def __init__(
+        self,
+        model: ALRModel,
+        pool: UnlabelledDataset,
+        loss: _Loss_fn,
+        optimiser: str,
+        threshold: float,
+        random_fixed_length_sampler_length: Optional[int] = None,
+        log_dir: Optional[str] = None,
+        patience: Optional[int] = None,
+        reload_best: Optional[bool] = False,
+        device: _DeviceType = None,
+        pool_loader_kwargs: Optional[dict] = {},
+        *args,
+        **kwargs,
+    ):
         self._pool = pool
         self._model = model
         self._loss = loss
@@ -228,15 +277,21 @@ class EphemeralTrainer:
         self._pool_loader_kwargs = pool_loader_kwargs
         self._rfls_len = random_fixed_length_sampler_length
 
-    def fit(self, train_loader: torchdata.DataLoader,
-            val_loader: Optional[torchdata.DataLoader] = None,
-            iterations: Optional[int] = 1,
-            epochs: Optional[int] = 1):
+    def fit(
+        self,
+        train_loader: torchdata.DataLoader,
+        val_loader: Optional[torchdata.DataLoader] = None,
+        iterations: Optional[int] = 1,
+        epochs: Optional[int] = 1,
+    ):
         if self._patience and val_loader is None:
-            raise ValueError("If patience is specified, then val_loader must be provided in .fit().")
+            raise ValueError(
+                "If patience is specified, then val_loader must be provided in .fit()."
+            )
 
         val_evaluator = create_supervised_evaluator(
-            self._model, metrics={'acc': Accuracy(), 'loss': Loss(self._loss)},
+            self._model,
+            metrics={"acc": Accuracy(), "loss": Loss(self._loss)},
             device=self._device,
         )
 
@@ -259,50 +314,69 @@ class EphemeralTrainer:
             # evaluator (e.g. early stopping, model checkpointing that depend on val_acc)
             metrics = val_evaluator.run(val_loader).metrics
 
-            history[f"val_acc"].append(metrics['acc'])
-            history[f"val_loss"].append(metrics['loss'])
+            history[f"val_acc"].append(metrics["acc"])
+            history[f"val_loss"].append(metrics["loss"])
             pbar.log_message(
                 f"\tval acc = {metrics['acc']}, val loss = {metrics['loss']}"
             )
 
         pseudo_label_manager = PseudoLabelManager(
-            pool=self._pool, model=self._model,
-            threshold=self._threshold, log_dir=self._log_dir,
-            device=self._device, **self._pool_loader_kwargs
+            pool=self._pool,
+            model=self._model,
+            threshold=self._threshold,
+            log_dir=self._log_dir,
+            device=self._device,
+            **self._pool_loader_kwargs,
         )
         trainer = create_pseudo_label_trainer(
-            model=self._model, loss=self._loss, optimiser=self._optimiser,
-            train_loader=train_loader, val_loader=val_loader,
-            pseudo_label_manager=pseudo_label_manager, rfls_len=self._rfls_len,
-            patience=self._patience, reload_best=self._reload_best,
-            epochs=epochs, device=self._device, *self._args, **self._kwargs,
+            model=self._model,
+            loss=self._loss,
+            optimiser=self._optimiser,
+            train_loader=train_loader,
+            val_loader=val_loader,
+            pseudo_label_manager=pseudo_label_manager,
+            rfls_len=self._rfls_len,
+            patience=self._patience,
+            reload_best=self._reload_best,
+            epochs=epochs,
+            device=self._device,
+            *self._args,
+            **self._kwargs,
         )
         # output of trainer are running averages of train_loss and train_acc (from the
         # last epoch of the supervised trainer)
-        pbar.attach(trainer, output_transform=lambda x: {'loss': x[0], 'acc': x[1]})
+        pbar.attach(trainer, output_transform=lambda x: {"loss": x[0], "acc": x[1]})
         if val_loader is not None and self._patience:
-            es = EarlyStopper(self._model, self._patience, trainer, key='acc', mode='max')
+            es = EarlyStopper(
+                self._model, self._patience, trainer, key="acc", mode="max"
+            )
             es.attach(val_evaluator)
         trainer.add_event_handler(Events.EPOCH_COMPLETED, _log_metrics)
         trainer.run(
-            range(iterations), max_epochs=iterations, epoch_length=1,
+            range(iterations),
+            max_epochs=iterations,
+            epoch_length=1,
         )
         if val_loader is not None and self._patience and self._reload_best:
             es.reload_best()
 
-        history['train_size'] = np.array(pseudo_label_manager.acquired_sizes) + len(train_loader.dataset)
+        history["train_size"] = np.array(pseudo_label_manager.acquired_sizes) + len(
+            train_loader.dataset
+        )
         return history
 
     def evaluate(self, data_loader: torchdata.DataLoader) -> dict:
         evaluator = create_supervised_evaluator(
-            self._model, metrics={'acc': Accuracy(), 'loss': Loss(self._loss)},
-            device=self._device
+            self._model,
+            metrics={"acc": Accuracy(), "loss": Loss(self._loss)},
+            device=self._device,
         )
         return evaluator.run(data_loader).metrics
 
+
 def main(threshold: float, b: int):
     manual_seed(42)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     BATCH_SIZE = 64
@@ -341,34 +415,49 @@ def main(threshold: float, b: int):
             # make pool return targets too. (i.e. debug mode)
             with dm.unlabelled.tmp_debug():
                 trainer = EphemeralTrainer(
-                    model, dm.unlabelled, F.nll_loss, 'Adam', threshold=threshold,
+                    model,
+                    dm.unlabelled,
+                    F.nll_loss,
+                    "Adam",
+                    threshold=threshold,
                     random_fixed_length_sampler_length=MIN_TRAIN_LEN,
-                    log_dir=(calib_metrics / f"rep_{r}" / f"iter_{i}"), patience=3,
-                    reload_best=True, device=device, pool_loader_kwargs=kwargs
+                    log_dir=(calib_metrics / f"rep_{r}" / f"iter_{i}"),
+                    patience=3,
+                    reload_best=True,
+                    device=device,
+                    pool_loader_kwargs=kwargs,
                 )
                 train_loader = torchdata.DataLoader(
-                    dm.labelled, batch_size=BATCH_SIZE,
-                    sampler=RandomFixedLengthSampler(dm.labelled, MIN_TRAIN_LEN, shuffle=True),
-                    **kwargs
+                    dm.labelled,
+                    batch_size=BATCH_SIZE,
+                    sampler=RandomFixedLengthSampler(
+                        dm.labelled, MIN_TRAIN_LEN, shuffle=True
+                    ),
+                    **kwargs,
                 )
                 with timeop() as t:
                     history = trainer.fit(
-                        train_loader, val_loader,
-                        iterations=SSL_ITERATIONS, epochs=EPOCHS
+                        train_loader,
+                        val_loader,
+                        iterations=SSL_ITERATIONS,
+                        epochs=EPOCHS,
                     )
             # eval on test set
             test_metrics = trainer.evaluate(test_loader)
-            accs[dm.n_labelled].append(test_metrics['acc'])
+            accs[dm.n_labelled].append(test_metrics["acc"])
             print(f"-- Iteration {i} of {ITERS} --")
-            print(f"\ttrain: {dm.n_labelled}; pool: {dm.n_unlabelled}\n"
-                  f"\t[test] acc: {test_metrics['acc']}; time: {t}")
+            print(
+                f"\ttrain: {dm.n_labelled}; pool: {dm.n_unlabelled}\n"
+                f"\t[test] acc: {test_metrics['acc']}; time: {t}"
+            )
 
             # save stuff
             with open(metrics / f"rep_{r}_iter_{i}.pkl", "wb") as fp:
                 payload = {
-                    'history': history, 'test_metrics': test_metrics,
-                    'labelled_classes': dm.unlabelled.labelled_classes,
-                    'labelled_indices': dm.unlabelled.labelled_indices,
+                    "history": history,
+                    "test_metrics": test_metrics,
+                    "labelled_classes": dm.unlabelled.labelled_classes,
+                    "labelled_indices": dm.unlabelled.labelled_indices,
                 }
                 pickle.dump(payload, fp)
             torch.save(model.state_dict(), saved_models / f"rep_{r}_iter_{i}.pth")
@@ -380,5 +469,5 @@ def main(threshold: float, b: int):
                 pickle.dump(accs, fp)
 
 
-if __name__ == '__main__':
-    main(threshold=.90, b=10)
+if __name__ == "__main__":
+    main(threshold=0.90, b=10)

@@ -18,7 +18,7 @@ class CIFAR10Net(nn.Module):
     # taken from: https://github.com/EricArazo/PseudoLabeling/blob/2fbbbd3ca648cae453e3659e2e2ed44f71be5906/utils_pseudoLab/ssl_networks.py
     """
 
-    def __init__(self, num_classes=10, drop_prob=.5):
+    def __init__(self, num_classes=10, drop_prob=0.5):
         super(CIFAR10Net, self).__init__()
         self.activation = nn.LeakyReLU(0.1)
         self.conv1a = weight_norm(nn.Conv2d(3, 128, 3, padding=1))
@@ -69,19 +69,18 @@ class CIFAR10Net(nn.Module):
         return F.log_softmax(self.fc1(x), dim=-1)
 
 
-
 def xlogy(x, y):
     res = x * torch.log(y)
-    res[y == 0] = .0
+    res[y == 0] = 0.0
     assert torch.isfinite(res).all()
     return res
+
 
 def get_scores(model, dataloader, device):
     model.eval()
     with torch.no_grad():
         mc_preds: torch.Tensor = torch.cat(
-            [model.stochastic_forward(x.to(device)).exp() for x, _ in dataloader],
-            dim=1
+            [model.stochastic_forward(x.to(device)).exp() for x, _ in dataloader], dim=1
         )
     # K N C
     mc_preds = mc_preds.double()
@@ -106,15 +105,16 @@ def get_scores(model, dataloader, device):
     assert E.shape == H.shape == I.shape == confidence.shape
 
     return {
-        'average_entropy': -E,
-        'predictive_entropy': H,
-        'average_entropy2': -E_1,
-        'predictive_entropy2': H_1,
-        'bald_score': I,
-        'bald_score2': I_1,
-        'confidence': confidence,
-        'class': argmax,
+        "average_entropy": -E,
+        "predictive_entropy": H,
+        "average_entropy2": -E_1,
+        "predictive_entropy2": H_1,
+        "bald_score": I,
+        "bald_score2": I_1,
+        "confidence": confidence,
+        "class": argmax,
     }
+
 
 def main(root, reps, result):
     manual_seed(42)
@@ -122,12 +122,15 @@ def main(root, reps, result):
     assert root.is_dir()
     result = Path(result)
     result.mkdir(parents=True)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     _, test = Dataset.CIFAR10.get()
     test_loader = torchdata.DataLoader(
-        test, shuffle=False, batch_size=512, **kwargs,
+        test,
+        shuffle=False,
+        batch_size=512,
+        **kwargs,
     )
     for rep in range(1, reps + 1):
         print(f"=== Rep {rep} of {reps} ===")
@@ -137,19 +140,24 @@ def main(root, reps, result):
             if i % 5 == 0:
                 print(f"Loading weights for {i} of {total}")
             iteration = int(str(w).split("_")[-1][:-3])
-            model = MCDropout(CIFAR10Net(num_classes=10), forward=20, fast=False).to(device)
+            model = MCDropout(CIFAR10Net(num_classes=10), forward=20, fast=False).to(
+                device
+            )
             model.load_state_dict(torch.load(w), strict=True)
             scores = get_scores(model, test_loader, device)
             scores_another = get_scores(model, test_loader, device)
             with open(result / f"rep_{rep}_iter_{iteration}.pkl", "wb") as fp:
                 pickle.dump((scores, scores_another), fp)
 
-if __name__ == '__main__':
-    main("../even/saved_models/bald_10_even",
-         reps=1,
-         result="scores/even",
+
+if __name__ == "__main__":
+    main(
+        "../even/saved_models/bald_10_even",
+        reps=1,
+        result="scores/even",
     )
-    main("../odd/saved_models/bald_10_odd",
-         reps=1,
-         result="scores/odd",
+    main(
+        "../odd/saved_models/bald_10_odd",
+        reps=1,
+        result="scores/odd",
     )

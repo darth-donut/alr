@@ -33,11 +33,13 @@ class IndexMarker(torchdata.Dataset):
 
 
 class PDS(torchdata.Dataset):
-    def __init__(self,
-                 dataset: IndexMarker,
-                 transform: Callable[[torch.Tensor], torch.Tensor],
-                 augmentation: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
-                 target_transform: Callable = lambda x: x):
+    def __init__(
+        self,
+        dataset: IndexMarker,
+        transform: Callable[[torch.Tensor], torch.Tensor],
+        augmentation: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+        target_transform: Callable = lambda x: x,
+    ):
         self.dataset = dataset
         self._augmentation = augmentation
         self._transform = transform
@@ -96,7 +98,7 @@ class PDS(torchdata.Dataset):
             yield self
 
     def override_targets(self, new_targets: torch.Tensor):
-        'PLEASE FOR THE LOVE OF GOD PASS A CLONE OF new_targets :)'
+        "PLEASE FOR THE LOVE OF GOD PASS A CLONE OF new_targets :)"
         assert new_targets.size(0) == len(self.dataset)
         # new_targets = [N x C]
         self.label_history.append(new_targets)
@@ -109,16 +111,15 @@ class PDS(torchdata.Dataset):
         for i in range(len(self)):
             overridden_target = self._new_targets[i]
             original_target = self.dataset[i][0][-1]
-            correct += (overridden_target.argmax(dim=-1).item() == original_target)
+            correct += overridden_target.argmax(dim=-1).item() == original_target
         return correct / len(self)
 
 
 # from https://github.com/facebookresearch/mixup-cifar10/blob/master/train.py#L119
-def mixup(x: torch.Tensor,
-          y: torch.Tensor,
-          alpha: float = 1.0,
-          device: _DeviceType = None):
-    '''Returns mixed inputs, pairs of targets, and lambda'''
+def mixup(
+    x: torch.Tensor, y: torch.Tensor, alpha: float = 1.0, device: _DeviceType = None
+):
+    """Returns mixed inputs, pairs of targets, and lambda"""
     if alpha > 0:
         lam = np.random.beta(alpha, alpha)
     else:
@@ -132,9 +133,8 @@ def mixup(x: torch.Tensor,
     return mixed_x, y_a, y_b, lam
 
 
-def reg_nll_loss(coef: Optional[Tuple[float, float]] = (.8, .4)):
-    def _reg_nll_loss(pred: torch.Tensor,
-                      target: torch.Tensor):
+def reg_nll_loss(coef: Optional[Tuple[float, float]] = (0.8, 0.4)):
+    def _reg_nll_loss(pred: torch.Tensor, target: torch.Tensor):
         C = target.size(-1)
         prob = pred.exp()
         # heuristic: empirical mean of mini-batch
@@ -143,30 +143,23 @@ def reg_nll_loss(coef: Optional[Tuple[float, float]] = (.8, .4)):
         prior = target.new_ones(C) / C
 
         # standard cross entropy loss: H[target, pred]
-        ce_loss = -torch.mean(
-            torch.sum(target * pred, dim=1)
-        )
+        ce_loss = -torch.mean(torch.sum(target * pred, dim=1))
         # prior loss: KL(prior || empirical mean) = sum c=1..C of prior * log[prior/emp. mean]
         # note, this is simplified, the full prior loss is:
         #  sum(prior * log[prior] - prior * log[prob_avg])
         # but since the first term is a constant, we drop it.
-        prior_loss = -torch.sum(
-            prior * torch.log(prob_avg)
-        )
+        prior_loss = -torch.sum(prior * torch.log(prob_avg))
         # entropy loss: neg. mean of sum c=1..C of p(y=c|x)log[p(y=c|x)]
-        entropy_loss = -torch.mean(
-            torch.sum(prob * pred, dim=1)
-        )
+        entropy_loss = -torch.mean(torch.sum(prob * pred, dim=1))
         return ce_loss + coef[0] * prior_loss + coef[1] * entropy_loss
 
     return _reg_nll_loss
 
 
-def reg_mixup_loss(coef: Optional[Tuple[float, float]] = (.8, .4)):
-    def _reg_mixup_loss(pred: torch.Tensor,
-                        y1: torch.Tensor,
-                        y2: torch.Tensor,
-                        lamb: int):
+def reg_mixup_loss(coef: Optional[Tuple[float, float]] = (0.8, 0.4)):
+    def _reg_mixup_loss(
+        pred: torch.Tensor, y1: torch.Tensor, y2: torch.Tensor, lamb: int
+    ):
         """
         pred is log_softmax,
         y1 and y2 are softmax probabilities
@@ -184,12 +177,8 @@ def reg_mixup_loss(coef: Optional[Tuple[float, float]] = (.8, .4)):
         term2 = -torch.mean(torch.sum(y2 * pred, dim=1))
         mixup_loss = lamb * term1 + (1 - lamb) * term2
 
-        prior_loss = -torch.sum(
-            prior * torch.log(prob_avg)
-        )
-        entropy_loss = -torch.mean(
-            torch.sum(prob * pred, dim=1)
-        )
+        prior_loss = -torch.sum(prior * torch.log(prob_avg))
+        entropy_loss = -torch.mean(torch.sum(prob * pred, dim=1))
 
         return mixup_loss + coef[0] * prior_loss + coef[1] * entropy_loss
 
@@ -202,15 +191,11 @@ def onehot_transform(n):
         res = torch.zeros(size=(n,))
         res[x] = 1
         return res
+
     return _onehot_transform
 
 
-def create_warmup_trainer(
-        model: nn.Module,
-        optimiser,
-        device: _DeviceType = None
-):
-
+def create_warmup_trainer(model: nn.Module, optimiser, device: _DeviceType = None):
     def _step(engine: Engine, batch):
         model.train()
         # prepare batch
@@ -230,23 +215,25 @@ def create_warmup_trainer(
 
 
 class PLMixupTrainer:
-    def __init__(self,
-                 model: nn.Module,
-                 optimiser: str,
-                 train_transform: Callable,
-                 test_transform: Callable,
-                 optimiser_kwargs,
-                 loader_kwargs,
-                 rfls_length: int,
-                 log_dir: Optional[str] = None,
-                 alpha: Optional[float] = 1.0,
-                 min_labelled: Optional[Union[int, float]] = 16,
-                 num_classes: Optional[int] = 10,
-                 data_augmentation: Optional[Callable] = None,
-                 batch_size: Optional[int] = 100,
-                 patience: Optional[Union[Tuple[int, int], int]] = (5, 25),
-                 lr_patience: Optional[int] = 10,
-                 device: _DeviceType = None):
+    def __init__(
+        self,
+        model: nn.Module,
+        optimiser: str,
+        train_transform: Callable,
+        test_transform: Callable,
+        optimiser_kwargs,
+        loader_kwargs,
+        rfls_length: int,
+        log_dir: Optional[str] = None,
+        alpha: Optional[float] = 1.0,
+        min_labelled: Optional[Union[int, float]] = 16,
+        num_classes: Optional[int] = 10,
+        data_augmentation: Optional[Callable] = None,
+        batch_size: Optional[int] = 100,
+        patience: Optional[Union[Tuple[int, int], int]] = (5, 25),
+        lr_patience: Optional[int] = 10,
+        device: _DeviceType = None,
+    ):
         # for now, assume model returns logsoftmax - ceebs.
         self._model = model
         self._train_transform = train_transform
@@ -268,29 +255,29 @@ class PLMixupTrainer:
         self.soft_augmented_label_history = None
 
     def _instantiate_optimiser(self):
-        return getattr(
-            torch.optim, self._optimiser
-        )(self._model.parameters(), **self._optim_kwargs)
+        return getattr(torch.optim, self._optimiser)(
+            self._model.parameters(), **self._optim_kwargs
+        )
 
-    def fit(self,
-            train: torchdata.Dataset,
-            val: torchdata.Dataset,
-            pool: torchdata.Dataset,
-            epochs: Optional[Tuple[int, int]] = (50, 400)):
+    def fit(
+        self,
+        train: torchdata.Dataset,
+        val: torchdata.Dataset,
+        pool: torchdata.Dataset,
+        epochs: Optional[Tuple[int, int]] = (50, 400),
+    ):
         if isinstance(self._patience, int):
             pat1, pat2 = self._patience
         else:
             pat1, pat2 = self._patience[0], self._patience[1]
         history = {
-            'val_loss': [],
-            'val_acc': [],
-            'override_acc': [],
+            "val_loss": [],
+            "val_acc": [],
+            "override_acc": [],
         }
         optimiser = self._instantiate_optimiser()
         train = PDS(
-            IndexMarker(
-                train, mark=IndexMarker.LABELLED
-            ),
+            IndexMarker(train, mark=IndexMarker.LABELLED),
             transform=self._train_transform,
             augmentation=self._data_augmentation,
             target_transform=onehot_transform(self._num_classes),
@@ -306,49 +293,48 @@ class PLMixupTrainer:
         )
         val._with_metadata = False
         train_loader = torchdata.DataLoader(
-            train, batch_size=self._batch_size,
-            sampler=RandomFixedLengthSampler(
-                train, self._rfls_length, shuffle=True
-            ),
-            **self._loader_kwargs
+            train,
+            batch_size=self._batch_size,
+            sampler=RandomFixedLengthSampler(train, self._rfls_length, shuffle=True),
+            **self._loader_kwargs,
         )
         pool_loader = torchdata.DataLoader(
-            pool, batch_size=512,
-            shuffle=False, **self._loader_kwargs
+            pool, batch_size=512, shuffle=False, **self._loader_kwargs
         )
         val_loader = torchdata.DataLoader(
-            val, batch_size=512,
-            shuffle=False, **self._loader_kwargs
+            val, batch_size=512, shuffle=False, **self._loader_kwargs
         )
         pbar = ProgressBar(desc=lambda _: "Stage 1")
 
         # warm up
         with train.no_fluff():
             val_eval = create_supervised_evaluator(
-                self._model, metrics={
-                    'acc': Accuracy(),
-                    'loss': Loss(F.nll_loss)
-                }, device=self._device
+                self._model,
+                metrics={"acc": Accuracy(), "loss": Loss(F.nll_loss)},
+                device=self._device,
             )
             trainer = create_warmup_trainer(
-                self._model, optimiser=optimiser,
+                self._model,
+                optimiser=optimiser,
                 device=self._device,
             )
             es = EarlyStopper(
-                self._model, patience=pat1,
-                trainer=trainer, key='acc', mode='max'
+                self._model, patience=pat1, trainer=trainer, key="acc", mode="max"
             )
             es.attach(val_eval)
 
             @trainer.on(Events.EPOCH_COMPLETED)
             def _log(e: Engine):
                 metrics = val_eval.run(val_loader).metrics
-                acc, loss = metrics['acc'], metrics['loss']
-                pbar.log_message(f"\tStage 1 epoch {e.state.epoch}/{e.state.max_epochs} "
-                                 f"[val] acc, loss = "
-                                 f"{acc:.4f}, {loss:.4f}")
-                history['val_acc'].append(acc)
-                history['val_loss'].append(loss)
+                acc, loss = metrics["acc"], metrics["loss"]
+                pbar.log_message(
+                    f"\tStage 1 epoch {e.state.epoch}/{e.state.max_epochs} "
+                    f"[val] acc, loss = "
+                    f"{acc:.4f}, {loss:.4f}"
+                )
+                history["val_acc"].append(acc)
+                history["val_loss"].append(loss)
+
             pbar.attach(trainer)
             trainer.run(train_loader, max_epochs=epochs[0])
             es.reload_best()
@@ -366,38 +352,45 @@ class PLMixupTrainer:
         pool.override_targets(torch.cat(pseudo_labels))
         plab_acc = pool.override_accuracy
         pbar.log_message(f"\t*End of stage 1*: overridden labels' acc: {plab_acc}")
-        history['override_acc'].append(plab_acc)
+        history["override_acc"].append(plab_acc)
 
         # start training with PL
         full_dataset = torchdata.ConcatDataset((train, pool))
         fds_loader = torchdata.DataLoader(
-            full_dataset, batch_sampler=MinLabelledSampler(
-                train, pool, batch_size=self._batch_size,
-                min_labelled=self._min_labelled
-            ), **self._loader_kwargs
+            full_dataset,
+            batch_sampler=MinLabelledSampler(
+                train,
+                pool,
+                batch_size=self._batch_size,
+                min_labelled=self._min_labelled,
+            ),
+            **self._loader_kwargs,
         )
         val_eval = create_supervised_evaluator(
-            self._model, metrics={
-                'acc': Accuracy(),
-                'loss': Loss(F.nll_loss)
-            }, device=self._device
+            self._model,
+            metrics={"acc": Accuracy(), "loss": Loss(F.nll_loss)},
+            device=self._device,
         )
         optimiser = self._instantiate_optimiser()
         scheduler = ReduceLROnPlateau(
-            optimiser, mode='max',
-            factor=.1, patience=self._lr_patience,
-            verbose=True, min_lr=1e-3,
+            optimiser,
+            mode="max",
+            factor=0.1,
+            patience=self._lr_patience,
+            verbose=True,
+            min_lr=1e-3,
         )
         trainer = create_plmixup_trainer(
-            self._model, optimiser,
-            pool, alpha=self._alpha,
+            self._model,
+            optimiser,
+            pool,
+            alpha=self._alpha,
             num_classes=self._num_classes,
             log_dir=self._log_dir,
-            device=self._device
+            device=self._device,
         )
         es = EarlyStopper(
-            self._model, patience=pat2,
-            trainer=trainer, key='acc', mode='max'
+            self._model, patience=pat2, trainer=trainer, key="acc", mode="max"
         )
         es.attach(val_eval)
 
@@ -407,13 +400,15 @@ class PLMixupTrainer:
         @trainer.on(Events.EPOCH_COMPLETED)
         def _log(e: Engine):
             metrics = val_eval.run(val_loader).metrics
-            acc, loss = metrics['acc'], metrics['loss']
-            pbar.log_message(f"\tEpoch {e.state.epoch}/{e.state.max_epochs} "
-                             f"[val] acc, loss = "
-                             f"{acc:.4f}, {loss:.4f}")
-            history['val_acc'].append(acc)
-            history['val_loss'].append(loss)
-            history['override_acc'].append(pool.override_accuracy)
+            acc, loss = metrics["acc"], metrics["loss"]
+            pbar.log_message(
+                f"\tEpoch {e.state.epoch}/{e.state.max_epochs} "
+                f"[val] acc, loss = "
+                f"{acc:.4f}, {loss:.4f}"
+            )
+            history["val_acc"].append(acc)
+            history["val_loss"].append(loss)
+            history["override_acc"].append(pool.override_accuracy)
             scheduler.step(acc)
             with pool.no_fluff():
                 pseudo_labels = []
@@ -433,13 +428,16 @@ class PLMixupTrainer:
             soft_label_history = soft_label_history[:-pat2]
             soft_augmented_label_history = soft_augmented_label_history[:-pat2]
         self.soft_label_history = torch.stack(soft_label_history, dim=0)
-        self.soft_augmented_label_history = torch.stack(soft_augmented_label_history, dim=0)
+        self.soft_augmented_label_history = torch.stack(
+            soft_augmented_label_history, dim=0
+        )
         return history
 
     def evaluate(self, data_loader: torchdata.DataLoader) -> dict:
         evaluator = create_supervised_evaluator(
-            self._model, metrics={'acc': Accuracy(), 'loss': Loss(F.nll_loss)},
-            device=self._device
+            self._model,
+            metrics={"acc": Accuracy(), "loss": Loss(F.nll_loss)},
+            device=self._device,
         )
         return evaluator.run(data_loader).metrics
 
@@ -458,17 +456,18 @@ def create_plmixup_trainer(model, optimiser, pool, alpha, num_classes, log_dir, 
         loss.backward()
         optimiser.step()
         return loss.item(), img_raw, img_aug, target, idx, mark
+
     e = Engine(_step)
     PLUpdater(
-        model, pool, log_dir=log_dir,
-        num_class=num_classes, device=device
+        model, pool, log_dir=log_dir, num_class=num_classes, device=device
     ).attach(e)
     return e
 
 
 class PLUpdater:
-    def __init__(self, model: nn.Module, pool: PDS,
-                 log_dir: str, num_class: int, device=None):
+    def __init__(
+        self, model: nn.Module, pool: PDS, log_dir: str, num_class: int, device=None
+    ):
         self._pseudo_labels = torch.empty(size=(len(pool), num_class))
         self._model = model
         self._pool = pool
@@ -499,9 +498,7 @@ class PLUpdater:
         # assert that all unlabelled data has been pseudo-labeled in this epoch
         assert self._debug_mask.all()
         # reset mask
-        self._debug_mask = torch.zeros(
-            self._pseudo_labels.size(0), dtype=torch.bool
-        )
+        self._debug_mask = torch.zeros(self._pseudo_labels.size(0), dtype=torch.bool)
 
         self._pool.override_targets(self._pseudo_labels.clone())
 
@@ -511,23 +508,22 @@ class PLUpdater:
                 with self._pool.no_fluff():
                     with self._pool.original_labels():
                         _calib_metrics(
-                            self._model, self._pool, self._log_dir,
-                            other_engine=engine, device=self._device
+                            self._model,
+                            self._pool,
+                            self._log_dir,
+                            other_engine=engine,
+                            device=self._device,
                         )
 
 
-def _calib_metrics(model, ds, log_dir,
-                   other_engine=None, device=None,
-                   pred_transform=lambda x: x.exp()):
-    kwargs = {} if not torch.cuda.is_available() else dict(
-        num_workers=4, pin_memory=True
+def _calib_metrics(
+    model, ds, log_dir, other_engine=None, device=None, pred_transform=lambda x: x.exp()
+):
+    kwargs = (
+        {} if not torch.cuda.is_available() else dict(num_workers=4, pin_memory=True)
     )
-    loader = torchdata.DataLoader(
-        ds, shuffle=False, batch_size=512, **kwargs
-    )
-    save_pl_metrics = create_supervised_evaluator(
-        model, metrics=None, device=device
-    )
+    loader = torchdata.DataLoader(ds, shuffle=False, batch_size=512, **kwargs)
+    save_pl_metrics = create_supervised_evaluator(model, metrics=None, device=device)
     pps = PLPredictionSaver(
         log_dir=log_dir,
         pred_transform=pred_transform,
@@ -559,4 +555,5 @@ class _WithTransform(torchdata.Dataset):
 def temp_ds_transform(transform, with_targets=False):
     def _trans(dataset: torchdata.Dataset) -> torchdata.Dataset:
         return _WithTransform(dataset, transform, with_targets)
+
     return _trans

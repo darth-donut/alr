@@ -17,11 +17,16 @@ from torch.nn.utils import weight_norm
 
 # PreactResNet18_WNdrop(drop_val=0.3, num_classes=10)
 def conv3x3_wn(in_planes, out_planes, stride=1):
-    return weight_norm(nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False))
+    return weight_norm(
+        nn.Conv2d(
+            in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False
+        )
+    )
 
 
 class PreActBlock_WNdrop(nn.Module):
-    '''Pre-activation version of the BasicBlock.'''
+    """Pre-activation version of the BasicBlock."""
+
     expansion = 1
 
     def __init__(self, in_planes, planes, dropout_rate, stride=1):
@@ -35,7 +40,15 @@ class PreActBlock_WNdrop(nn.Module):
         self.shortcut = nn.Sequential()
         if stride != 1 or in_planes != self.expansion * planes:
             self.shortcut = nn.Sequential(
-                weight_norm(nn.Conv2d(in_planes, self.expansion * planes, kernel_size=1, stride=stride, bias=False))
+                weight_norm(
+                    nn.Conv2d(
+                        in_planes,
+                        self.expansion * planes,
+                        kernel_size=1,
+                        stride=stride,
+                        bias=False,
+                    )
+                )
             )
 
     def forward(self, x):
@@ -56,10 +69,18 @@ class ResNet_wn(nn.Module):
         self.conv1 = conv3x3_wn(3, 64)
         self.bn1 = nn.BatchNorm2d(64)
         self.drop = drop_val
-        self.layer1 = self._make_layer(block, 64, num_blocks[0], dropout_rate=self.drop, stride=1)
-        self.layer2 = self._make_layer(block, 128, num_blocks[1], dropout_rate=self.drop, stride=2)
-        self.layer3 = self._make_layer(block, 256, num_blocks[2], dropout_rate=self.drop, stride=2)
-        self.layer4 = self._make_layer(block, 512, num_blocks[3], dropout_rate=self.drop, stride=2)
+        self.layer1 = self._make_layer(
+            block, 64, num_blocks[0], dropout_rate=self.drop, stride=1
+        )
+        self.layer2 = self._make_layer(
+            block, 128, num_blocks[1], dropout_rate=self.drop, stride=2
+        )
+        self.layer3 = self._make_layer(
+            block, 256, num_blocks[2], dropout_rate=self.drop, stride=2
+        )
+        self.layer4 = self._make_layer(
+            block, 512, num_blocks[3], dropout_rate=self.drop, stride=2
+        )
         self.linear = weight_norm(nn.Linear(512 * block.expansion, num_classes))
 
     def _make_layer(self, block, planes, num_blocks, dropout_rate, stride):
@@ -92,7 +113,10 @@ class ResNet_wn(nn.Module):
 
 
 def PreactResNet18_WNdrop(drop_val=0.3, num_classes=10):
-    return ResNet_wn(PreActBlock_WNdrop, [2, 2, 2, 2], drop_val=drop_val, num_classes=num_classes)
+    return ResNet_wn(
+        PreActBlock_WNdrop, [2, 2, 2, 2], drop_val=drop_val, num_classes=num_classes
+    )
+
 
 class AugmentNoise(torchdata.Dataset):
     def __init__(self, dataset: torchdata.Dataset, mean: float, std: float):
@@ -110,7 +134,7 @@ class AugmentNoise(torchdata.Dataset):
 
 def xlogy(x, y):
     res = x * torch.log(y)
-    res[y == 0] = .0
+    res[y == 0] = 0.0
     assert torch.isfinite(res).all()
     return res
 
@@ -119,8 +143,7 @@ def get_scores(model, dataloader, device):
     model.eval()
     with torch.no_grad():
         mc_preds: torch.Tensor = torch.cat(
-            [model.stochastic_forward(x.to(device)).exp() for x, _ in dataloader],
-            dim=1
+            [model.stochastic_forward(x.to(device)).exp() for x, _ in dataloader], dim=1
         )
     # K N C
     mc_preds = mc_preds.double()
@@ -145,14 +168,14 @@ def get_scores(model, dataloader, device):
     assert E.shape == H.shape == I.shape == confidence.shape
 
     return {
-        'average_entropy': -E,
-        'predictive_entropy': H,
-        'average_entropy2': -E_1,
-        'predictive_entropy2': H_1,
-        'bald_score': I,
-        'bald_score2': I_1,
-        'confidence': confidence,
-        'class': argmax,
+        "average_entropy": -E,
+        "predictive_entropy": H,
+        "average_entropy2": -E_1,
+        "predictive_entropy2": H_1,
+        "bald_score": I,
+        "bald_score2": I_1,
+        "confidence": confidence,
+        "class": argmax,
     }
 
 
@@ -162,7 +185,7 @@ def main(root, reps, result):
     assert root.is_dir()
     result = Path(result)
     result.mkdir(parents=True)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     _, test = Dataset.CIFAR10.get()
@@ -175,7 +198,10 @@ def main(root, reps, result):
     test = torchdata.ConcatDataset(full_test)
 
     test_loader = torchdata.DataLoader(
-        test, shuffle=False, batch_size=512, **kwargs,
+        test,
+        shuffle=False,
+        batch_size=512,
+        **kwargs,
     )
 
     for rep in range(1, reps + 1):
@@ -187,8 +213,9 @@ def main(root, reps, result):
                 print(f"Loading weights for {i} of {total}")
             iteration = int(str(w).split("_")[-1][:-3])
             model = MCDropout(
-                PreactResNet18_WNdrop(drop_val=0.1, num_classes=10)
-                , forward=20, fast=False
+                PreactResNet18_WNdrop(drop_val=0.1, num_classes=10),
+                forward=20,
+                fast=False,
             ).to(device)
             model.load_state_dict(torch.load(w), strict=True)
             scores = get_scores(model, test_loader, device)
@@ -197,9 +224,9 @@ def main(root, reps, result):
                 pickle.dump((scores, scores_another), fp)
 
 
-if __name__ == '__main__':
-    main(f"saved_models/pres_cifar_aug",
-         reps=1,
-         result=f"scores",
+if __name__ == "__main__":
+    main(
+        f"saved_models/pres_cifar_aug",
+        reps=1,
+        result=f"scores",
     )
-

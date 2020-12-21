@@ -24,13 +24,18 @@ def test_BALD_best_case():
         nonlocal global_counter
         if global_counter == best_point:
             global_counter += 1
-            return torch.stack([torch.eye(n_classes) + 1e-6 for _ in range(x.size(0))], dim=1)
+            return torch.stack(
+                [torch.eye(n_classes) + 1e-6 for _ in range(x.size(0))], dim=1
+            )
         else:
             global_counter += 1
-            return torch.softmax(torch.randn(size=(n_forward, x.size(0), n_classes)), dim=-1)
+            return torch.softmax(
+                torch.randn(size=(n_forward, x.size(0), n_classes)), dim=-1
+            )
+
     bald = BALD(
         pred_fn=pred_fn,
-        device='cpu',
+        device="cpu",
         batch_size=1,
     )
     X_pool = FromArray(np.random.randint(0, 100, size=(100, 28)))
@@ -53,9 +58,10 @@ def test_BALD_worst_case():
             global_counter += 1
             arr = torch.softmax(torch.randn(size=(n_forward, n_classes)), dim=-1)
             return torch.stack([arr.clone() for _ in range(x.size(0))], dim=1)
+
     bald = BALD(
         pred_fn=pred_fn,
-        device='cpu',
+        device="cpu",
         batch_size=1,
     )
     X_pool = FromArray(np.random.randint(0, 100, size=(100, 28)))

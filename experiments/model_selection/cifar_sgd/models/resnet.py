@@ -6,23 +6,38 @@ from torch.nn import functional as F
 import torch.utils.model_zoo as model_zoo
 
 
-__all__ = ['ResNetV2', 'resnet18_v2', 'resnet34_v2', 'resnet50_v2', 'resnet101_v2',
-           'resnet152_v2']
+__all__ = [
+    "ResNetV2",
+    "resnet18_v2",
+    "resnet34_v2",
+    "resnet50_v2",
+    "resnet101_v2",
+    "resnet152_v2",
+]
 
 model_urls = {
-    'resnet18_v2': '',
-    'resnet34_v2': '',
-    'resnet50_v2': '',
-    'resnet101_v2': '',
-    'resnet152_v2': '',
+    "resnet18_v2": "",
+    "resnet34_v2": "",
+    "resnet50_v2": "",
+    "resnet101_v2": "",
+    "resnet152_v2": "",
 }
 
 # resnet18_v2(num_classes=10, dropout_rate=0.3, fc_dropout_rate=0.3):
 
+
 def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
     """3x3 convolution with padding"""
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=dilation, groups=groups, bias=False, dilation=dilation)
+    return nn.Conv2d(
+        in_planes,
+        out_planes,
+        kernel_size=3,
+        stride=stride,
+        padding=dilation,
+        groups=groups,
+        bias=False,
+        dilation=dilation,
+    )
 
 
 def conv1x1(in_planes, out_planes, stride=1):
@@ -125,20 +140,32 @@ class ResNetV2(nn.Module):
         layers (list of int) : numbers of layers in each block
         num_classes (int) :, default 1000, number of classification classes.
     """
+
     def __init__(self, block, layers, *, num_classes, dropout_rate, fc_dropout_rate):
         super(ResNetV2, self).__init__()
-        assert block in (BottleneckV2, BasicBlockV2), "Argument block should be BottleneckV2 or BasicBlockV2"
+        assert block in (
+            BottleneckV2,
+            BasicBlockV2,
+        ), "Argument block should be BottleneckV2 or BasicBlockV2"
         self.inplanes = 64
 
-        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = nn.Conv2d(
+            3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False
+        )
         self.bn1 = nn.BatchNorm2d(self.inplanes)
         self.relu1 = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         self.layer1 = self._make_layer(block, 64, layers[0], dropout_rate=dropout_rate)
-        self.layer2 = self._make_layer(block, 128, layers[1], dropout_rate=dropout_rate, stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], dropout_rate=dropout_rate, stride=2)
-        self.layer4 = self._make_layer(block, 512, layers[3], dropout_rate=dropout_rate, stride=2)
+        self.layer2 = self._make_layer(
+            block, 128, layers[1], dropout_rate=dropout_rate, stride=2
+        )
+        self.layer3 = self._make_layer(
+            block, 256, layers[2], dropout_rate=dropout_rate, stride=2
+        )
+        self.layer4 = self._make_layer(
+            block, 512, layers[3], dropout_rate=dropout_rate, stride=2
+        )
 
         self.bn5 = nn.BatchNorm2d(self.inplanes)
         self.relu5 = nn.ReLU(inplace=True)
@@ -148,7 +175,7 @@ class ResNetV2(nn.Module):
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
@@ -156,10 +183,17 @@ class ResNetV2(nn.Module):
     def _make_layer(self, block, planes, blocks, *, dropout_rate, stride=1):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = nn.Conv2d(self.inplanes, planes * block.expansion,
-                                   kernel_size=1, stride=stride, bias=False)
+            downsample = nn.Conv2d(
+                self.inplanes,
+                planes * block.expansion,
+                kernel_size=1,
+                stride=stride,
+                bias=False,
+            )
 
-        layers = [block(dropout_rate, self.inplanes, planes, stride, downsample), ]
+        layers = [
+            block(dropout_rate, self.inplanes, planes, stride, downsample),
+        ]
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
             layers.append(block(dropout_rate, self.inplanes, planes))
@@ -194,7 +228,7 @@ def resnet18_v2(pretrained=False, **kwargs):
     """
     model = ResNetV2(BasicBlockV2, [2, 2, 2, 2], **kwargs)
     if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet18']))
+        model.load_state_dict(model_zoo.load_url(model_urls["resnet18"]))
     return model
 
 
@@ -205,7 +239,7 @@ def resnet34_v2(pretrained=False, **kwargs):
     """
     model = ResNetV2(BasicBlockV2, [3, 4, 6, 3], **kwargs)
     if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet34']))
+        model.load_state_dict(model_zoo.load_url(model_urls["resnet34"]))
     return model
 
 
@@ -216,7 +250,7 @@ def resnet50_v2(pretrained=False, **kwargs):
     """
     model = ResNetV2(BottleneckV2, [3, 4, 6, 3], **kwargs)
     if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet50']))
+        model.load_state_dict(model_zoo.load_url(model_urls["resnet50"]))
     return model
 
 
@@ -227,7 +261,7 @@ def resnet101_v2(pretrained=False, **kwargs):
     """
     model = ResNetV2(BottleneckV2, [3, 4, 23, 3], **kwargs)
     if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet101']))
+        model.load_state_dict(model_zoo.load_url(model_urls["resnet101"]))
     return model
 
 
@@ -238,5 +272,5 @@ def resnet152_v2(pretrained=False, **kwargs):
     """
     model = ResNetV2(BottleneckV2, [3, 8, 36, 3], **kwargs)
     if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet152']))
+        model.load_state_dict(model_zoo.load_url(model_urls["resnet152"]))
     return model

@@ -19,7 +19,9 @@ def test_soft_nll_loss():
     cross_entropy = -(target_dist * torch.log(probs)).sum(dim=-1).mean()
 
     # now, test nll
-    res = soft_nll_loss(preds=F.log_softmax(logits, dim=-1), target=F.log_softmax(target_logits, dim=-1))
+    res = soft_nll_loss(
+        preds=F.log_softmax(logits, dim=-1), target=F.log_softmax(target_logits, dim=-1)
+    )
     assert torch.isclose(res, cross_entropy)
 
 

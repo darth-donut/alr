@@ -6,8 +6,12 @@ from typing import Optional, Dict, Callable, Sequence
 import torch
 import torch.utils.data as torchdata
 from ignite.contrib.handlers.param_scheduler import LRScheduler
-from ignite.engine import Engine, Events, \
-    create_supervised_evaluator, create_supervised_trainer
+from ignite.engine import (
+    Engine,
+    Events,
+    create_supervised_evaluator,
+    create_supervised_trainer,
+)
 from ignite.metrics import Loss, Accuracy, RunningAverage
 
 from torch import nn
@@ -37,7 +41,11 @@ class Noise(torchdata.Dataset):
         std = 0.15
         n = length - 2
         weak = torch.randn(size=(n // 2, channels, img_shape[0], img_shape[1])) * std
-        strong = torch.randn(size=(n // 2 + (n % 2), channels, img_shape[0], img_shape[1])) * std * 2
+        strong = (
+            torch.randn(size=(n // 2 + (n % 2), channels, img_shape[0], img_shape[1]))
+            * std
+            * 2
+        )
         self.data = torch.cat([weak, strong, black, white])
         assert self.data.shape == (length, channels, *img_shape)
 
@@ -50,7 +58,7 @@ class Noise(torchdata.Dataset):
 
 def xlogy(x, y):
     res = x * torch.log(y)
-    res[y == 0] = .0
+    res[y == 0] = 0.0
     assert torch.isfinite(res).all()
     return res
 
@@ -79,15 +87,16 @@ def get_scores(mc_preds):
     assert E.shape == H.shape == I.shape == confidence.shape
 
     return {
-        'average_entropy': -E,
-        'predictive_entropy': H,
-        'average_entropy2': -E_1,
-        'predictive_entropy2': H_1,
-        'bald_score': I,
-        'bald_score2': I_1,
-        'confidence': confidence,
-        'class': argmax,
+        "average_entropy": -E,
+        "predictive_entropy": H,
+        "average_entropy2": -E_1,
+        "predictive_entropy2": H_1,
+        "bald_score": I,
+        "bald_score2": I_1,
+        "confidence": confidence,
+        "class": argmax,
     }
+
 
 def get_preds(models, loader, device):
     preds = []
@@ -99,6 +108,7 @@ def get_preds(models, loader, device):
                 model_preds.append(m(x.to(device)).exp())
             preds.append(torch.cat(model_preds))
     return torch.stack(preds)
+
 
 def evaluate(preds, loader, device):
     ys = torch.cat([y for _, y in loader]).to(device)
@@ -122,17 +132,20 @@ class TDataset(torchdata.Dataset):
         else:
             return self.augmentation(res)
 
+
 class Trainer:
-    def __init__(self,
-                 model: nn.Module,
-                 loss: _Loss_fn,
-                 optimiser: str,
-                 patience: Optional[int] = None,
-                 lr_patience: Optional[int] = None,
-                 reload_best: Optional[bool] = False,
-                 device: _DeviceType = None,
-                 *args,
-                 **kwargs):
+    def __init__(
+        self,
+        model: nn.Module,
+        loss: _Loss_fn,
+        optimiser: str,
+        patience: Optional[int] = None,
+        lr_patience: Optional[int] = None,
+        reload_best: Optional[bool] = False,
+        device: _DeviceType = None,
+        *args,
+        **kwargs,
+    ):
         r"""
 
         Args:
@@ -149,7 +162,9 @@ class Trainer:
             **kwargs (Any, optional): keyword arguments to be passed into the optimiser.
         """
         self._loss = loss
-        self._optim = getattr(torch.optim, optimiser)(model.parameters(), *args, **kwargs)
+        self._optim = getattr(torch.optim, optimiser)(
+            model.parameters(), *args, **kwargs
+        )
         self._patience = patience
         self._reload_best = reload_best
         self._lr_patience = lr_patience
@@ -158,32 +173,43 @@ class Trainer:
         self._device = device
         self._model = model
 
-    def fit(self,
-            train_loader: torchdata.DataLoader,
-            val_loader: Optional[torchdata.DataLoader] = None,
-            epochs: Optional[int] = 1,
-            callbacks: Optional[Sequence[Callable]] = None) -> Dict[str, list]:
+    def fit(
+        self,
+        train_loader: torchdata.DataLoader,
+        val_loader: Optional[torchdata.DataLoader] = None,
+        epochs: Optional[int] = 1,
+        callbacks: Optional[Sequence[Callable]] = None,
+    ) -> Dict[str, list]:
         if self._patience and val_loader is None:
-            raise ValueError("If patience is specified, then val_loader must be provided in .fit().")
+            raise ValueError(
+                "If patience is specified, then val_loader must be provided in .fit()."
+            )
 
         pbar = ProgressBar(desc=lambda _: "Training")
         history = defaultdict(list)
 
         val_evaluator = create_supervised_evaluator(
-            self._model, metrics={'acc': Accuracy(), 'loss': Loss(self._loss)},
-            device=self._device
+            self._model,
+            metrics={"acc": Accuracy(), "loss": Loss(self._loss)},
+            device=self._device,
         )
 
         if self._lr_patience:
             scheduler = ReduceLROnPlateau(
-                optimizer=self._optim, mode='max',
-                factor=.1, patience=self._lr_patience,
-                verbose=True, min_lr=1e-3,
+                optimizer=self._optim,
+                mode="max",
+                factor=0.1,
+                patience=self._lr_patience,
+                verbose=True,
+                min_lr=1e-3,
             )
 
         def _log_metrics(engine: Engine):
             # moving averages
-            train_acc, train_loss = engine.state.metrics['train_acc'], engine.state.metrics['train_loss']
+            train_acc, train_loss = (
+                engine.state.metrics["train_acc"],
+                engine.state.metrics["train_loss"],
+            )
             history[f"train_acc"].append(train_acc)
             history[f"train_loss"].append(train_loss)
             pbar.log_message(
@@ -198,25 +224,31 @@ class Trainer:
             # evaluator (e.g. early stopping, model checkpointing that depend on val_acc)
             metrics = val_evaluator.run(val_loader).metrics
 
-            history[f"val_acc"].append(metrics['acc'])
-            history[f"val_loss"].append(metrics['loss'])
+            history[f"val_acc"].append(metrics["acc"])
+            history[f"val_loss"].append(metrics["loss"])
             pbar.log_message(
                 f"\tval acc = {metrics['acc']}, val loss = {metrics['loss']}"
             )
-            scheduler.step(metrics['acc'])
+            scheduler.step(metrics["acc"])
 
         trainer = create_supervised_trainer(
-            self._model, optimizer=self._optim,
-            loss_fn=self._loss, device=self._device,
+            self._model,
+            optimizer=self._optim,
+            loss_fn=self._loss,
+            device=self._device,
             output_transform=lambda x, y, y_pred, loss: (loss.item(), y_pred, y),
         )
         pbar.attach(trainer)
 
-        RunningAverage(Accuracy(output_transform=lambda x: (x[1], x[2]))).attach(trainer, 'train_acc')
-        RunningAverage(output_transform=lambda x: x[0]).attach(trainer, 'train_loss')
+        RunningAverage(Accuracy(output_transform=lambda x: (x[1], x[2]))).attach(
+            trainer, "train_acc"
+        )
+        RunningAverage(output_transform=lambda x: x[0]).attach(trainer, "train_loss")
 
         if val_loader is not None and self._patience:
-            es = EarlyStopper(self._model, self._patience, trainer, key='acc', mode='max')
+            es = EarlyStopper(
+                self._model, self._patience, trainer, key="acc", mode="max"
+            )
             es.attach(val_evaluator)
         trainer.add_event_handler(Events.EPOCH_COMPLETED, _log_metrics)
         if callbacks is not None:
@@ -224,7 +256,8 @@ class Trainer:
                 trainer.add_event_handler(Events.EPOCH_COMPLETED, c)
 
         trainer.run(
-            train_loader, max_epochs=epochs,
+            train_loader,
+            max_epochs=epochs,
         )
         if val_loader is not None and self._patience and self._reload_best:
             es.reload_best()
@@ -232,16 +265,15 @@ class Trainer:
 
     def evaluate(self, data_loader: torchdata.DataLoader) -> dict:
         evaluator = create_supervised_evaluator(
-            self._model, metrics={'acc': Accuracy(), 'loss': Loss(self._loss)},
-            device=self._device
+            self._model,
+            metrics={"acc": Accuracy(), "loss": Loss(self._loss)},
+            device=self._device,
         )
         return evaluator.run(data_loader).metrics
 
 
 def calc_calib_metrics(loader, model: nn.Module, log_dir, device):
-    evaluator = create_supervised_evaluator(
-        model, metrics=None, device=device
-    )
+    evaluator = create_supervised_evaluator(model, metrics=None, device=device)
     pds = PLPredictionSaver(log_dir)
     pds.attach(evaluator)
     evaluator.run(loader)
@@ -249,7 +281,7 @@ def calc_calib_metrics(loader, model: nn.Module, log_dir, device):
 
 def main(model_name, aug, dataset, iters, repeats, result):
     manual_seed(42)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     # ========= CONSTANTS ===========
@@ -285,13 +317,13 @@ def main(model_name, aug, dataset, iters, repeats, result):
         train, test = Dataset.CIFAR10.get(raw=True)
         regular_transform = [
             tv.transforms.ToTensor(),
-            tv.transforms.Normalize(*Dataset.CIFAR10.normalisation_params)
+            tv.transforms.Normalize(*Dataset.CIFAR10.normalisation_params),
         ]
     elif dataset == "cinic":
         train, test = Dataset.CINIC10.get(raw=True)
         regular_transform = [
             tv.transforms.ToTensor(),
-            tv.transforms.Normalize(*Dataset.CINIC10.normalisation_params)
+            tv.transforms.Normalize(*Dataset.CINIC10.normalisation_params),
         ]
     else:
         raise ValueError("dataset only accepts two arguments: cinic or cifar")
@@ -308,21 +340,31 @@ def main(model_name, aug, dataset, iters, repeats, result):
     val = TDataset(val, regular_transform)
 
     val_loader = torchdata.DataLoader(
-        val, batch_size=512, shuffle=False, **kwargs,
+        val,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     test_loader = torchdata.DataLoader(
-        test, batch_size=512, shuffle=False, **kwargs,
+        test,
+        batch_size=512,
+        shuffle=False,
+        **kwargs,
     )
     accs = defaultdict(list)
     dm = DataManager(train, pool, RandomAcquisition())
 
-    manual_seed(42) # reseed
+    manual_seed(42)  # reseed
     _, cinic_test = Dataset.CINIC10.get()
-    transform = tv.transforms.Compose([
-        tv.transforms.ToTensor(),
-        tv.transforms.Normalize((0.4377, 0.4438, 0.4728), (0.1980, 0.2010, 0.1970))
-    ])
-    svhn_test = tv.datasets.SVHN("data", split="test", transform=transform, download=True)
+    transform = tv.transforms.Compose(
+        [
+            tv.transforms.ToTensor(),
+            tv.transforms.Normalize((0.4377, 0.4438, 0.4728), (0.1980, 0.2010, 0.1970)),
+        ]
+    )
+    svhn_test = tv.datasets.SVHN(
+        "data", split="test", transform=transform, download=True
+    )
     subset, _ = stratified_partition(svhn_test, classes=10, size=10_000)
 
     with open("subset_idxs.pkl", "wb") as fp:
@@ -331,7 +373,10 @@ def main(model_name, aug, dataset, iters, repeats, result):
     noise = Noise(length=20)
     score_test = torchdata.ConcatDataset((cinic_test, svhn_test, noise))
     score_test_loader = torchdata.DataLoader(
-        score_test, shuffle=False, batch_size=512, **kwargs,
+        score_test,
+        shuffle=False,
+        batch_size=512,
+        **kwargs,
     )
 
     for r in range(1, REPEATS + 1):
@@ -344,16 +389,25 @@ def main(model_name, aug, dataset, iters, repeats, result):
                     print(f"\tTraining model {m + 1} of 5")
                     model = Dataset.CIFAR10.model.to(device)
                     trainer = Trainer(
-                        model, F.nll_loss, optimiser='SGD',
-                        patience=20, lr_patience=16,
-                        reload_best=True, device=device,
+                        model,
+                        F.nll_loss,
+                        optimiser="SGD",
+                        patience=20,
+                        lr_patience=16,
+                        reload_best=True,
+                        device=device,
                         # SGD parameters
-                        lr=0.1, weight_decay=1e-4, momentum=0.9,
+                        lr=0.1,
+                        weight_decay=1e-4,
+                        momentum=0.9,
                     )
                     train_loader = torchdata.DataLoader(
-                        dm.labelled, batch_size=BATCH_SIZE,
-                        sampler=RandomFixedLengthSampler(dm.labelled, MIN_TRAIN_LENGTH, shuffle=True),
-                        **kwargs
+                        dm.labelled,
+                        batch_size=BATCH_SIZE,
+                        sampler=RandomFixedLengthSampler(
+                            dm.labelled, MIN_TRAIN_LENGTH, shuffle=True
+                        ),
+                        **kwargs,
                     )
                     trainer.fit(train_loader, val_loader, epochs=EPOCHS)
                     models.append(model)
@@ -362,14 +416,18 @@ def main(model_name, aug, dataset, iters, repeats, result):
             preds = get_preds(models, test_loader, device).mean(dim=0)
             test_acc = evaluate(preds, test_loader, device)
             print(f"=== Iteration {i} of {ITERS} ({i / ITERS:.2%}) ===")
-            print(f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
-                  f"pool: {dm.n_unlabelled}; test: {len(test)}")
+            print(
+                f"\ttrain: {dm.n_labelled}; val: {len(val)}; "
+                f"pool: {dm.n_unlabelled}; test: {len(test)}"
+            )
             print(f"\t[test] acc: {test_acc}")
             accs[dm.n_labelled].append(test_acc)
             with open(template + "_accs.pkl", "wb") as fp:
                 pickle.dump(accs, fp)
             for mi, m in enumerate(models, 1):
-                torch.save(m.state_dict(), saved_models / f"rep_{r}_iter_{i}_model_{mi}.pt")
+                torch.save(
+                    m.state_dict(), saved_models / f"rep_{r}_iter_{i}_model_{mi}.pt"
+                )
 
             preds = get_preds(models, score_test_loader, device)
             scores = get_scores(preds)
@@ -379,12 +437,13 @@ def main(model_name, aug, dataset, iters, repeats, result):
             dm.acquire(b=400)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import argparse
+
     args = argparse.ArgumentParser()
-    args.add_argument("--data", choices=['cinic', 'cifar'])
+    args.add_argument("--data", choices=["cinic", "cifar"])
     args.add_argument("--iters", default=11, type=int)
     args.add_argument("--reps", default=1, type=int)
-    args.add_argument("--aug", action='store_true')
+    args.add_argument("--aug", action="store_true")
     args = args.parse_args()
     main("13cnn", args.aug, args.data, args.iters, args.reps, result="scores/13cnn")

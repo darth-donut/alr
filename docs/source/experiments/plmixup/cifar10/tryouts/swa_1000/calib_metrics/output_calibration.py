@@ -7,15 +7,16 @@ from torch.nn.utils import weight_norm
 from torch.nn import functional as F
 from alr.training.utils import PLPredictionSaver
 
-device = torch.device('cuda:0')
+device = torch.device("cuda:0")
 kwargs = dict(num_workers=4, pin_memory=True)
+
 
 class Net(nn.Module):
     """
     CNN from Mean Teacher paper
     """
 
-    def __init__(self, num_classes=10, dropRatio=.5):
+    def __init__(self, num_classes=10, dropRatio=0.5):
         super(Net, self).__init__()
 
         self.activation = nn.LeakyReLU(0.1)
@@ -67,18 +68,21 @@ class Net(nn.Module):
         return F.log_softmax(self.fc1(x), dim=-1)
 
 
-test_transform = tv.transforms.Compose([
-    tv.transforms.ToTensor(),
-    tv.transforms.Normalize((0.4914, 0.4822, 0.4465),
-                            (0.2023, 0.1994, 0.2010)),
-])
+test_transform = tv.transforms.Compose(
+    [
+        tv.transforms.ToTensor(),
+        tv.transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    ]
+)
 
 cifar_test = tv.datasets.CIFAR10(
-    root="data", train=False, transform=test_transform,
-    download=True
+    root="data", train=False, transform=test_transform, download=True
 )
 test_loader = torchdata.DataLoader(
-    cifar_test, shuffle=False, batch_size=512, **kwargs,
+    cifar_test,
+    shuffle=False,
+    batch_size=512,
+    **kwargs,
 )
 
 model = Net(dropRatio=0.1).to(device)
@@ -86,12 +90,12 @@ model.load_state_dict(torch.load("weights.pt"), strict=True)
 
 model.eval()
 
+
 def calib_metrics(loader, model: nn.Module, log_dir, device):
-    evaluator = create_supervised_evaluator(
-        model, metrics=None, device=device
-    )
+    evaluator = create_supervised_evaluator(model, metrics=None, device=device)
     pds = PLPredictionSaver(log_dir)
     pds.attach(evaluator)
     evaluator.run(loader)
+
 
 calib_metrics(test_loader, model, "calib_metrics", device=device)

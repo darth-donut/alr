@@ -8,8 +8,9 @@ import torch.utils.data as torchdata
 from alr.utils._type_aliases import _ActiveLearningDataset
 
 
-def stratified_partition(ds: torchdata.Dataset, classes: int, size: int) \
-        -> Tuple[torchdata.Dataset, torchdata.Dataset]:
+def stratified_partition(
+    ds: torchdata.Dataset, classes: int, size: int
+) -> Tuple[torchdata.Dataset, torchdata.Dataset]:
     r"""
     Partitions `ds` into training pool and a faux unlabelled pool. The "unlabelled"
     pool will contain `len(ds) - size` data points and the training pool will contain
@@ -46,11 +47,13 @@ def stratified_partition(ds: torchdata.Dataset, classes: int, size: int) \
         if count[y]:
             count[y] -= 1
             sampled_idxs.append(idx)
-    return _ActiveLearningDataset(training=torchdata.Subset(ds, sampled_idxs),
-                                  unlabelled=torchdata.Subset(ds, list(original_idxs - set(sampled_idxs))))
+    return _ActiveLearningDataset(
+        training=torchdata.Subset(ds, sampled_idxs),
+        unlabelled=torchdata.Subset(ds, list(original_idxs - set(sampled_idxs))),
+    )
 
 
-def eval_fwd_exp(model: 'MCDropout'):
+def eval_fwd_exp(model: "MCDropout"):
     r"""
     A helper function that returns a function that
     sets model to eval mode, calls stochastic forward, and exponentiates the output.
@@ -72,13 +75,15 @@ def eval_fwd_exp(model: 'MCDropout'):
         tensor that contains (non log-) probabilities
         from the model's stochastic forward pass
     """
+
     def _fwd(x: torch.Tensor) -> torch.Tensor:
         model.eval()
         return model.stochastic_forward(x).exp()
+
     return _fwd
 
 
-def eval_fwd(model: 'MCDropout'):
+def eval_fwd(model: "MCDropout"):
     r"""
     A helper function that returns a function that
     sets model to eval mode and calls stochastic forward.
@@ -99,7 +104,9 @@ def eval_fwd(model: 'MCDropout'):
         Callable: a function that takes a tensor and returns a
         tensor that contains probabilities from the model's stochastic forward pass
     """
+
     def _fwd(x: torch.Tensor) -> torch.Tensor:
         model.eval()
         return model.stochastic_forward(x)
+
     return _fwd

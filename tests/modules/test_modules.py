@@ -54,11 +54,12 @@ def test_dropout_replacement_no_clone():
 def test_functional_dropout_warn():
     class WarnNet(nn.Module):
         def forward(self, x):
-            F.dropout(x, .5, True)
+            F.dropout(x, 0.5, True)
 
     class WarnNet2(nn.Module):
         def forward(self, x):
-            F.dropout2d(x, .5, True)
+            F.dropout2d(x, 0.5, True)
+
     with pytest.warns(UserWarning):
         replace_dropout(WarnNet())
     with pytest.warns(UserWarning):

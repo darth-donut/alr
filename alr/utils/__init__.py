@@ -12,10 +12,16 @@ from alr.utils._type_aliases import _DeviceType
 from alr.utils.progress_bar import progress_bar, range_progress_bar
 
 __all__ = [
-    'Elapsed', 'timeop', 'time_this', 'Time',
-    'stratified_partition', 'eval_fwd', 'eval_fwd_exp',
-    'progress_bar', 'range_progress_bar',
-    'manual_seed'
+    "Elapsed",
+    "timeop",
+    "time_this",
+    "Time",
+    "stratified_partition",
+    "eval_fwd",
+    "eval_fwd_exp",
+    "progress_bar",
+    "range_progress_bar",
+    "manual_seed",
 ]
 
 
@@ -43,7 +49,7 @@ def manual_seed(seed: Optional[int] = 42, det_cudnn: Optional[bool] = False) -> 
     # random
     random.seed(seed)
     # env
-    os.environ['PYTHONHASHSEED'] = str(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
     return seed
 
 
@@ -56,6 +62,7 @@ def _map_device(xs: Sequence[torch.Tensor], device: _DeviceType):
 def savefig(filename, fig=None, pad_inches=0.05):
     """Get rid of them pesky padding"""
     import matplotlib.pyplot as plt
+
     if not fig:
         fig = plt.gcf()
-    fig.savefig(filename, pad_inches=pad_inches, bbox_inches='tight')
+    fig.savefig(filename, pad_inches=pad_inches, bbox_inches="tight")

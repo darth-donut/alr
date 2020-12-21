@@ -19,8 +19,10 @@ import os
 os.chdir("/Users/harry/Documents/workspace/thesis/reports/06_diagnostics")
 SAVE = True
 
+
 def sort_files(files):
     return sorted(files, key=lambda x: int(str(x).split("_")[-1][:-4]))
+
 
 def score_sample_plot(ax, scores, size, ylab, xlab, top=None, cifar_idx=10_000):
     if not top:
@@ -30,15 +32,25 @@ def score_sample_plot(ax, scores, size, ylab, xlab, top=None, cifar_idx=10_000):
     cifar_mask = idxs < cifar_idx
     svhn_mask = idxs >= cifar_idx
     assert cifar_mask.sum() + svhn_mask.sum() == top
-    ax.scatter(np.nonzero(cifar_mask)[0], scores[idxs[cifar_mask]], alpha=1, label='CIFAR', s=2)
-    ax.scatter(np.nonzero(~cifar_mask)[0], scores[idxs[svhn_mask]], color='red', label='SVHN', s=2)
+    ax.scatter(
+        np.nonzero(cifar_mask)[0], scores[idxs[cifar_mask]], alpha=1, label="CIFAR", s=2
+    )
+    ax.scatter(
+        np.nonzero(~cifar_mask)[0],
+        scores[idxs[svhn_mask]],
+        color="red",
+        label="SVHN",
+        s=2,
+    )
     ax.set_xlabel(xlab)
     ax.set_ylabel(ylab)
     ax.set_title(f"Size {size}")
 
+
 def itc(iteration, batch_size=10, initial=20):
     # iteration to counts
     return initial + (iteration - 1) * batch_size
+
 
 def bald_range(ax, scores, size, xlabel, ylabel):
     cifar_scores = scores[:10000]
@@ -49,6 +61,7 @@ def bald_range(ax, scores, size, xlabel, ylabel):
     if ylabel:
         ax.set_ylabel("BALD")
     ax.set_title(f"Size {size}")
+
 
 def entropy_range(ax, entropy, etype, size, xlabel, ylabel):
     cifar_ent = entropy[:10000]
@@ -83,8 +96,10 @@ def proportion_plot(ax, scores, etype, size, xlabel, ylabel, gt=True):
     ax.set_title(f"Size {size}")
 
 
-
-root = Path("/Users/harry/Documents/workspace/thesis/experiments/exploration/ood") / "bald10_svhn_ood"
+root = (
+    Path("/Users/harry/Documents/workspace/thesis/experiments/exploration/ood")
+    / "bald10_svhn_ood"
+)
 
 with open(root / "subset_idxs.pkl", "rb") as fp:
     idxs = pickle.load(fp)
@@ -107,14 +122,14 @@ confidence_2 = []
 class_1 = []
 class_2 = []
 map_containers = {
-    'bald_score': (scores_1, scores_2),
-    'bald_score2': (ascores_1, ascores_2),
-    'predictive_entropy': (predictive_entropy_1, predictive_entropy_2),
-    'predictive_entropy2': (apredictive_entropy_1, apredictive_entropy_2),
-    'average_entropy': (average_entropy_1, average_entropy_2),
-    'average_entropy2': (aaverage_entropy_1, aaverage_entropy_2),
-    'confidence': (confidence_1, confidence_2),
-    'class': (class_1, class_2),
+    "bald_score": (scores_1, scores_2),
+    "bald_score2": (ascores_1, ascores_2),
+    "predictive_entropy": (predictive_entropy_1, predictive_entropy_2),
+    "predictive_entropy2": (apredictive_entropy_1, apredictive_entropy_2),
+    "average_entropy": (average_entropy_1, average_entropy_2),
+    "average_entropy2": (aaverage_entropy_1, aaverage_entropy_2),
+    "confidence": (confidence_1, confidence_2),
+    "class": (class_1, class_2),
 }
 for f in files:
     with open(f, "rb") as fp:
@@ -144,7 +159,7 @@ classes = np.stack([class_1, class_2])
 
 N = 10
 interval = np.linspace(0, bald_scores.shape[1] - 1, num=N).astype(int)
-fig_params = dict(nrows=2, ncols=5,figsize=(5 * N, 5), sharex=True, sharey=True)
+fig_params = dict(nrows=2, ncols=5, figsize=(5 * N, 5), sharex=True, sharey=True)
 
 
 ## Visual analysis
@@ -156,11 +171,15 @@ conf = confidence[0]
 fig, axes = plt.subplots(**fig_params)
 axes = axes.flatten()
 for i, ax in enumerate(axes):
-    ylab = "BALD" if i % fig_params['ncols'] == 0 else ""
-    xlab = "Samples" if i >= fig_params['ncols'] else ""
+    ylab = "BALD" if i % fig_params["ncols"] == 0 else ""
+    xlab = "Samples" if i >= fig_params["ncols"] else ""
     score_sample_plot(
-        axes[i], scores[interval[i]], top=50,
-        ylab=ylab, xlab=xlab, size=itc(interval[i] + 1)
+        axes[i],
+        scores[interval[i]],
+        top=50,
+        ylab=ylab,
+        xlab=xlab,
+        size=itc(interval[i] + 1),
     )
 axes[i].legend()
 fig.suptitle("Top 50 BALD scoring points")
@@ -172,9 +191,11 @@ fig, axes = plt.subplots(**fig_params)
 axes = axes.flatten()
 for i, ax in enumerate(axes):
     bald_range(
-        axes[i], scores[interval[i]], size=itc(interval[i] + 1),
-        xlabel=(i >= fig_params['ncols']),
-        ylabel=(i % fig_params['ncols'] == 0),
+        axes[i],
+        scores[interval[i]],
+        size=itc(interval[i] + 1),
+        xlabel=(i >= fig_params["ncols"]),
+        ylabel=(i % fig_params["ncols"] == 0),
     )
 fig.suptitle("BALD score distribution in CIFAR-10 and SVHN")
 if SAVE:
@@ -188,12 +209,11 @@ for i, ax in enumerate(axes):
         pent[interval[i]],
         etype="Predictive Entropy",
         size=itc(interval[i] + 1),
-        xlabel=(i >= fig_params['ncols']),
-        ylabel=(i % fig_params['ncols'] == 0),
+        xlabel=(i >= fig_params["ncols"]),
+        ylabel=(i % fig_params["ncols"] == 0),
         gt=False,
     )
 axes[i].legend()
 fig.suptitle("Predictive Entropy")
 if SAVE:
     savefig("/Users/harry/Documents/workspace/thesis/figures/4/svhn_pred_entropy.pdf")
-

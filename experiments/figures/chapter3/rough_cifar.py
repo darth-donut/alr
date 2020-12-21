@@ -16,7 +16,7 @@ from alr.data.datasets import Dataset
 import os
 
 os.chdir("/Users/harry/Documents/workspace/thesis/reports/09_imbalanced_classes")
-DATA = 'CIFAR'
+DATA = "CIFAR"
 include_noise = False
 SAVE = False
 minority_classes = {0, 4, 9}
@@ -29,10 +29,14 @@ for idx, (_, y) in enumerate(test):
     else:
         majority_idxs.append(idx)
 
+
 def sort_files(files):
     return sorted(files, key=lambda x: int(str(x).split("_")[-1][:-4]))
 
-def score_sample_plot(ax, scores, size, ylab, xlab, top=None, cifar_idx=10_000, no_svhn=False):
+
+def score_sample_plot(
+    ax, scores, size, ylab, xlab, top=None, cifar_idx=10_000, no_svhn=False
+):
     if no_svhn:
         scores = scores[:10_000]
     if not top:
@@ -49,17 +53,40 @@ def score_sample_plot(ax, scores, size, ylab, xlab, top=None, cifar_idx=10_000, 
     minority_counts = cifar_minority_mask.sum()
     majority_counts = cifar_majority_mask.sum()
     assert svhn_counts + minority_counts + majority_counts == top
-    ax.scatter(np.nonzero(cifar_majority_mask)[0], scores[idxs[cifar_majority_mask]], alpha=1, label='majority', s=2)
+    ax.scatter(
+        np.nonzero(cifar_majority_mask)[0],
+        scores[idxs[cifar_majority_mask]],
+        alpha=1,
+        label="majority",
+        s=2,
+    )
     if not no_svhn:
-        ax.scatter(np.nonzero(svhn_mask)[0], scores[idxs[svhn_mask]], color='red', label='SVHN', s=2)
-    ax.scatter(np.nonzero(cifar_minority_mask)[0], scores[idxs[cifar_minority_mask]], color='orange', label='minority', s=2)
+        ax.scatter(
+            np.nonzero(svhn_mask)[0],
+            scores[idxs[svhn_mask]],
+            color="red",
+            label="SVHN",
+            s=2,
+        )
+    ax.scatter(
+        np.nonzero(cifar_minority_mask)[0],
+        scores[idxs[cifar_minority_mask]],
+        color="orange",
+        label="minority",
+        s=2,
+    )
     ax.set_xlabel(xlab)
     ax.set_ylabel(ylab)
-    ax.set_title(f"Size {size} {svhn_counts/top:.2%} SVHN;\n{minority_counts/top:.2%}Minority; {majority_counts/top:.2%} Majority", fontsize=8)
+    ax.set_title(
+        f"Size {size} {svhn_counts/top:.2%} SVHN;\n{minority_counts/top:.2%}Minority; {majority_counts/top:.2%} Majority",
+        fontsize=8,
+    )
+
 
 def itc(iteration, batch_size=400, initial=800):
     # iteration to counts
     return initial + (iteration - 1) * batch_size
+
 
 def bald_range(ax, scores, size, xlabel, ylabel):
     cifar_scores = scores[:10000]
@@ -72,6 +99,7 @@ def bald_range(ax, scores, size, xlabel, ylabel):
     if ylabel:
         ax.set_ylabel("BALD")
     ax.set_title(f"Size {size}")
+
 
 def entropy_range(ax, entropy, etype, size, xlabel, ylabel):
     cifar_ent = entropy[:10000]
@@ -103,8 +131,8 @@ def proportion_plot(ax, scores, etype, size, xlabel, ylabel, gt=True):
             may.append((cifar[majority_idxs] <= i).mean())
             sy.append((svhn <= i).mean())
     ax.plot(x, may, label=f"Majority")
-    ax.plot(x, miy, label="Minority", color='orange')
-    ax.plot(x, sy, label="SVHN", color='red')
+    ax.plot(x, miy, label="Minority", color="orange")
+    ax.plot(x, sy, label="SVHN", color="red")
     if xlabel:
         ax.set_xlabel(etype)
     if ylabel:
@@ -138,14 +166,14 @@ confidence_2 = []
 class_1 = []
 class_2 = []
 map_containers = {
-    'bald_score': (scores_1,),
-    'bald_score2': (ascores_1,),
-    'predictive_entropy': (predictive_entropy_1,),
-    'predictive_entropy2': (apredictive_entropy_1,),
-    'average_entropy': (average_entropy_1,),
-    'average_entropy2': (aaverage_entropy_1,),
-    'confidence': (confidence_1,),
-    'class': (class_1,),
+    "bald_score": (scores_1,),
+    "bald_score2": (ascores_1,),
+    "predictive_entropy": (predictive_entropy_1,),
+    "predictive_entropy2": (apredictive_entropy_1,),
+    "average_entropy": (average_entropy_1,),
+    "average_entropy2": (aaverage_entropy_1,),
+    "confidence": (confidence_1,),
+    "class": (class_1,),
 }
 for f in files:
     with open(f, "rb") as fp:
@@ -182,7 +210,7 @@ classes = np.stack(class_1)
 
 N = 6
 interval = np.linspace(0, bald_scores.shape[0] - 1, num=N).astype(int)
-fig_params = dict(nrows=2, ncols=3,figsize=(3 * 3, 2 * 3), sharex=True, sharey=True)
+fig_params = dict(nrows=2, ncols=3, figsize=(3 * 3, 2 * 3), sharex=True, sharey=True)
 
 ## Visual analysis
 scores = bald_scores
@@ -195,9 +223,11 @@ fig, axes = plt.subplots(**fig_params)
 axes = axes.flatten()
 for i, ax in enumerate(axes):
     bald_range(
-        axes[i], scores[interval[i]], size=itc(interval[i] + 1),
-        xlabel=(i >= fig_params['ncols']),
-        ylabel=(i % fig_params['ncols'] == 0),
+        axes[i],
+        scores[interval[i]],
+        size=itc(interval[i] + 1),
+        xlabel=(i >= fig_params["ncols"]),
+        ylabel=(i % fig_params["ncols"] == 0),
     )
 fig.suptitle(f"BALD scores")
 savefig("/Users/harry/Documents/workspace/thesis/figures/4/rough_bald_dist.pdf")
@@ -210,12 +240,10 @@ for i, ax in enumerate(axes):
         pent[interval[i]],
         etype="Predictive Entropy",
         size=itc(interval[i] + 1),
-        xlabel=(i >= fig_params['ncols']),
-        ylabel=(i % fig_params['ncols'] == 0),
-        gt=False
+        xlabel=(i >= fig_params["ncols"]),
+        ylabel=(i % fig_params["ncols"] == 0),
+        gt=False,
     )
 axes[i].legend()
 fig.suptitle(f"Predictive Entropy")
 savefig("/Users/harry/Documents/workspace/thesis/figures/4/rough_pred_ent.pdf")
-
-

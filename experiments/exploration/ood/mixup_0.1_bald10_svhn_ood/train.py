@@ -9,18 +9,19 @@ import torchvision as tv
 import torch.utils.data as torchdata
 from alr.utils import stratified_partition, manual_seed
 
+
 def xlogy(x, y):
     res = x * torch.log(y)
-    res[y == 0] = .0
+    res[y == 0] = 0.0
     assert torch.isfinite(res).all()
     return res
+
 
 def get_scores(model, dataloader, device):
     model.eval()
     with torch.no_grad():
         mc_preds: torch.Tensor = torch.cat(
-            [model.stochastic_forward(x.to(device)).exp() for x, _ in dataloader],
-            dim=1
+            [model.stochastic_forward(x.to(device)).exp() for x, _ in dataloader], dim=1
         )
     # K N C
     mc_preds = mc_preds.double()
@@ -45,15 +46,16 @@ def get_scores(model, dataloader, device):
     assert E.shape == H.shape == I.shape == confidence.shape
 
     return {
-        'average_entropy': -E,
-        'predictive_entropy': H,
-        'average_entropy2': -E_1,
-        'predictive_entropy2': H_1,
-        'bald_score': I,
-        'bald_score2': I_1,
-        'confidence': confidence,
-        'class': argmax,
+        "average_entropy": -E,
+        "predictive_entropy": H,
+        "average_entropy2": -E_1,
+        "predictive_entropy2": H_1,
+        "bald_score": I,
+        "bald_score2": I_1,
+        "confidence": confidence,
+        "class": argmax,
     }
+
 
 def main(root, reps, result):
     manual_seed(42)
@@ -61,15 +63,19 @@ def main(root, reps, result):
     assert root.is_dir()
     result = Path(result)
     result.mkdir(parents=True)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     kwargs = dict(num_workers=4, pin_memory=True)
 
     _, cifar_test = Dataset.CIFAR10.get()
-    transform = tv.transforms.Compose([
-        tv.transforms.ToTensor(),
-        tv.transforms.Normalize((0.4377, 0.4438, 0.4728), (0.1980, 0.2010, 0.1970))
-    ])
-    svhn_test = tv.datasets.SVHN("data", split="test", transform=transform, download=True)
+    transform = tv.transforms.Compose(
+        [
+            tv.transforms.ToTensor(),
+            tv.transforms.Normalize((0.4377, 0.4438, 0.4728), (0.1980, 0.2010, 0.1970)),
+        ]
+    )
+    svhn_test = tv.datasets.SVHN(
+        "data", split="test", transform=transform, download=True
+    )
     subset, _ = stratified_partition(svhn_test, classes=10, size=10_000)
 
     with open("subset_idxs.pkl", "wb") as fp:
@@ -77,7 +83,10 @@ def main(root, reps, result):
 
     test = torchdata.ConcatDataset((cifar_test, svhn_test))
     test_loader = torchdata.DataLoader(
-        test, shuffle=False, batch_size=512, **kwargs,
+        test,
+        shuffle=False,
+        batch_size=512,
+        **kwargs,
     )
     for rep in range(1, reps + 1):
         print(f"=== Rep {rep} of {reps} ===")
@@ -94,9 +103,10 @@ def main(root, reps, result):
             with open(result / f"rep_{rep}_iter_{iteration}.pkl", "wb") as fp:
                 pickle.dump((scores, scores_another), fp)
 
-if __name__ == '__main__':
-    main("weights",
-         reps=1,
-         result="scores",
-    )
 
+if __name__ == "__main__":
+    main(
+        "weights",
+        reps=1,
+        result="scores",
+    )

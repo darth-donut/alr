@@ -11,10 +11,12 @@ import torchvision as tv
 
 
 class UnlabelledDataset(torchdata.Dataset):
-    def __init__(self,
-                 dataset: torchdata.Dataset,
-                 label_fn: Optional[Callable[[torchdata.Dataset], torchdata.Dataset]] = None,
-                 debug: Optional[bool] = False):
+    def __init__(
+        self,
+        dataset: torchdata.Dataset,
+        label_fn: Optional[Callable[[torchdata.Dataset], torchdata.Dataset]] = None,
+        debug: Optional[bool] = False,
+    ):
         r"""
         A wrapper class to manage the unlabelled `dataset` by providing a simple
         interface to :meth:`label` specific points and remove from the underlying dataset.
@@ -62,7 +64,9 @@ class UnlabelledDataset(torchdata.Dataset):
         local_mask = self._idx_mask
 
         # can't acquire something that's not in the pool anymore
-        assert self._mask[local_mask[idxs]].all(), "Can't label points that have been labelled."
+        assert self._mask[
+            local_mask[idxs]
+        ].all(), "Can't label points that have been labelled."
         assert self._len, "There are no remaining unlabelled points."
         labelled = torchdata.Subset(self._dataset, local_mask[idxs])
         if self._label_fn:
@@ -117,8 +121,11 @@ class UnlabelledDataset(torchdata.Dataset):
         """
         if self._label_fn is not None:
             import warnings
+
             # xxx: because it's 2 am and i'm lazy. (note to self: could save these targets in .label() fn)
-            warnings.warn("UnlabelledDataset was initialised with label_fn but labelled_classes was invoked.")
+            warnings.warn(
+                "UnlabelledDataset was initialised with label_fn but labelled_classes was invoked."
+            )
         classes = []
         for i in self.labelled_indices:
             classes.append(self._dataset[i][1])
@@ -153,10 +160,12 @@ class UnlabelledDataset(torchdata.Dataset):
 
 
 class DataManager:
-    def __init__(self,
-                 labelled: torchdata.Dataset,
-                 unlabelled: UnlabelledDataset,
-                 acquisition_fn: AcquisitionFunction):
+    def __init__(
+        self,
+        labelled: torchdata.Dataset,
+        unlabelled: UnlabelledDataset,
+        acquisition_fn: AcquisitionFunction,
+    ):
         r"""
         A stateful data manager class
 
@@ -274,9 +283,7 @@ class DataManager:
             NoneType: None
         """
         # TODO(optim): is there a better way to do this?
-        self._labelled = torchdata.ConcatDataset(
-            (self._labelled, dataset)
-        )
+        self._labelled = torchdata.ConcatDataset((self._labelled, dataset))
 
 
 class PseudoLabelDataset(torchdata.Dataset):
@@ -324,15 +331,19 @@ class RelabelDataset(torchdata.Dataset):
 
 
 class TransformedDataset(torchdata.Dataset):
-    def __init__(self,
-                 raw_dataset: torchdata.Dataset,
-                 transform: Optional[list] = None,
-                 augmentation: Optional[list] = None):
+    def __init__(
+        self,
+        raw_dataset: torchdata.Dataset,
+        transform: Optional[list] = None,
+        augmentation: Optional[list] = None,
+    ):
         self.raw_dataset = raw_dataset
         self._transforms = transform
         self._augmentations = augmentation
         self.transform = tv.transforms.Compose(transform) if transform else lambda x: x
-        self.augmentation = tv.transforms.Compose(augmentation) if augmentation else lambda x: x
+        self.augmentation = (
+            tv.transforms.Compose(augmentation) if augmentation else lambda x: x
+        )
 
     def __len__(self):
         return len(self.raw_dataset)
@@ -364,7 +375,8 @@ def disable_augmentation(dataset: UnlabelledDataset):
     ds = dataset._dataset
     assert isinstance(ds, TransformedDataset)
     new_dataset = copy.copy(dataset)
-    new_dataset._dataset = TransformedDataset(ds.raw_dataset, transform=ds._transforms, augmentation=None)
+    new_dataset._dataset = TransformedDataset(
+        ds.raw_dataset, transform=ds._transforms, augmentation=None
+    )
     assert len(new_dataset) == expected_len
     return new_dataset
-
