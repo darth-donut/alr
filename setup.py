@@ -67,13 +67,13 @@ setup(
     # your project is installed. For an analysis of "install_requires" vs pip's
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=["torch", "tqdm", "numpy", "torchvision", "pytorch-ignite==0.4.1"],
+    install_requires=["torch==1.7.1", "tqdm", "numpy", "torchvision==0.8.2", "pytorch-ignite==0.4.1", "batchbald-redux==2.0.2"],
     # List additional groups of dependencies here (e.g. development
     # dependencies). You can install these using the following syntax,
     # for example:
     # $ pip install -e .[dev,test]
     extras_require={
-        # "dev": ["check-manifest"],
+        "dev": ["black", "matplotlib"],
         "test": [
             "coverage",
             "codecov",

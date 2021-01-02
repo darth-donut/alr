@@ -11,7 +11,7 @@ Install this library as a pip package. Clone this repository and enter the follo
 
 
 ```bash
-pip install -e .
+pip install -e .[dev,test]
 ```
 
 
