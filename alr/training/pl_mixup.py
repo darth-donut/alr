@@ -14,33 +14,44 @@ from contextlib import contextmanager
 from ignite.engine import Engine, Events, create_supervised_evaluator
 from ignite.metrics import Accuracy, Loss
 from torch.nn import functional as F
+from enum import Enum
 
 
-class IndexMarker(torchdata.Dataset):
-    PSEUDO_LABELLED = True
-    LABELLED = False
-
-    def __init__(self, dataset: torchdata.Dataset, mark):
-        self.dataset = dataset
-        self.mark = mark
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def __getitem__(self, idx):
-        # returns (x, y), idx, mark
-        return self.dataset[idx], idx, self.mark
+class DataMarker(Enum):
+    PSEUDO_LABELLED = "pseudo_labelled"
+    LABELLED = "labelled"
 
 
-class PDS(torchdata.Dataset):
+class PseudoLabelledDataset(torchdata.Dataset):
+    class IndexMarker(torchdata.Dataset):
+        """
+        Wraps a regular dataset such that it returns
+        the data, its index, and a mark when indexed.
+        This helps the training process identify which instances
+        are pseudo-labelled and what their indices were so we can
+        update the next iteration's pseduo-labels.
+        """
+
+        def __init__(self, dataset: torchdata.Dataset, mark):
+            self.dataset = dataset
+            self.mark = mark
+
+        def __len__(self):
+            return len(self.dataset)
+
+        def __getitem__(self, idx):
+            # returns (x, y), idx, mark
+            return self.dataset[idx], idx, self.mark
+
     def __init__(
         self,
-        dataset: IndexMarker,
+        dataset: torchdata.Dataset,
+        mark: DataMarker,
         transform: Callable[[torch.Tensor], torch.Tensor],
-        augmentation: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
-        target_transform: Callable = lambda x: x,
+        augmentation: Optional[Callable[[torch.Tensor], torch.Tensor]] = lambda x: x,
+        target_transform: Optional[Callable] = lambda x: x,
     ):
-        self.dataset = dataset
+        self.dataset = PseudoLabelledDataset.IndexMarker(dataset, mark)
         self._augmentation = augmentation
         self._transform = transform
         self._with_metadata = True
@@ -56,12 +67,9 @@ class PDS(torchdata.Dataset):
         if self._new_targets is not None and (not self._original_labels):
             target = self._new_targets[idx]
 
-        if self._augmentation:
-            img_aug = self._augmentation(img_raw)
-            img_raw, img_aug = map(self._transform, [img_raw, img_aug])
-        else:
-            img_raw = self._transform(img_raw)
-            img_aug = img_raw
+        img_aug = self._augmentation(img_raw)
+        img_raw, img_aug = map(self._transform, [img_raw, img_aug])
+
         if self._with_metadata:
             return img_raw, img_aug, self._target_transform(target), idx, mark
         return img_aug, self._target_transform(target)
@@ -73,7 +81,7 @@ class PDS(torchdata.Dataset):
     def original_labels(self):
         if not self._original_labels:
             self._original_labels = True
-            yield
+            yield self
             self._original_labels = False
         else:
             yield self
@@ -98,7 +106,13 @@ class PDS(torchdata.Dataset):
             yield self
 
     def override_targets(self, new_targets: torch.Tensor):
-        "PLEASE FOR THE LOVE OF GOD PASS A CLONE OF new_targets :)"
+        r"""
+        Overrides the target classes for this dataset.
+        Args:
+            new_targets: tensor of shape [N,], where len(self) == N (i.e. your pseudo-labels)
+
+        Returns: None
+        """
         assert new_targets.size(0) == len(self.dataset)
         # new_targets = [N x C]
         self.label_history.append(new_targets)
@@ -106,6 +120,7 @@ class PDS(torchdata.Dataset):
 
     @property
     def override_accuracy(self):
+        # computes the accuracy of the psuedo-labels after calling override_targets
         assert self._new_targets is not None
         correct = 0
         for i in range(len(self)):
@@ -221,8 +236,8 @@ class PLMixupTrainer:
         optimiser: str,
         train_transform: Callable,
         test_transform: Callable,
-        optimiser_kwargs,
-        loader_kwargs,
+        optimiser_kwargs: dict,
+        loader_kwargs: dict,
         rfls_length: int,
         log_dir: Optional[str] = None,
         alpha: Optional[float] = 1.0,
@@ -267,7 +282,7 @@ class PLMixupTrainer:
         epochs: Optional[Tuple[int, int]] = (50, 400),
     ):
         if isinstance(self._patience, int):
-            pat1, pat2 = self._patience
+            pat1 = pat2 = self._patience
         else:
             pat1, pat2 = self._patience[0], self._patience[1]
         history = {
@@ -276,19 +291,22 @@ class PLMixupTrainer:
             "override_acc": [],
         }
         optimiser = self._instantiate_optimiser()
-        train = PDS(
-            IndexMarker(train, mark=IndexMarker.LABELLED),
+        train = PseudoLabelledDataset(
+            train,
+            mark=DataMarker.LABELLED,
             transform=self._train_transform,
             augmentation=self._data_augmentation,
             target_transform=onehot_transform(self._num_classes),
         )
-        pool = PDS(
-            IndexMarker(pool, mark=IndexMarker.PSEUDO_LABELLED),
+        pool = PseudoLabelledDataset(
+            pool,
+            mark=DataMarker.PSEUDO_LABELLED,
             transform=self._train_transform,
             augmentation=self._data_augmentation,
         )
-        val = PDS(
-            IndexMarker(val, mark=None),
+        val = PseudoLabelledDataset(
+            val,
+            mark=DataMarker.LABELLED,
             transform=self._test_transform,
         )
         val._with_metadata = False
@@ -347,7 +365,7 @@ class PLMixupTrainer:
                     self._model.eval()
                     for x, _ in pool_loader:
                         x = x.to(self._device)
-                        # add (softmax) probability, hence .exp()
+                        # model outputs logsoftmax, use .exp() here to get probs
                         pseudo_labels.append(self._model(x).exp().detach().cpu())
         pool.override_targets(torch.cat(pseudo_labels))
         plab_acc = pool.override_accuracy
@@ -466,14 +484,19 @@ def create_plmixup_trainer(model, optimiser, pool, alpha, num_classes, log_dir, 
 
 class PLUpdater:
     def __init__(
-        self, model: nn.Module, pool: PDS, log_dir: str, num_class: int, device=None
+        self,
+        model: nn.Module,
+        pool: PseudoLabelledDataset,
+        log_dir: str,
+        num_class: int,
+        device=None,
     ):
         self._pseudo_labels = torch.empty(size=(len(pool), num_class))
         self._model = model
         self._pool = pool
         self._log_dir = log_dir
         self._device = device
-        self._debug_mask = torch.zeros(len(pool), dtype=torch.bool)
+        self._sanity_check_mask = torch.zeros(len(pool), dtype=torch.bool)
 
     def attach(self, engine: Engine):
         engine.add_event_handler(Events.ITERATION_COMPLETED, self._on_iteration_end)
@@ -484,26 +507,31 @@ class PLUpdater:
         _, img_raw, img_aug, target, idx, mark = engine.state.output
         with torch.no_grad():
             self._model.eval()
-            pld_mask = mark == IndexMarker.PSEUDO_LABELLED
+            pld_mask = mark == DataMarker.PSEUDO_LABELLED
             # unaugmented, raw, pseudo-labelled images
             pld_img = img_raw[pld_mask]
             # get *softmax* predictions -- exponentiate the output!
             new_pld = self._model(pld_img).exp().detach().cpu()
             mask = idx[pld_mask]
             self._pseudo_labels[mask] = new_pld
-            self._debug_mask[mask] = 1
+            self._sanity_check_mask[mask] = 1
 
     def _on_epoch_end(self, engine: Engine):
         # sanity check!
         # assert that all unlabelled data has been pseudo-labeled in this epoch
-        assert self._debug_mask.all()
+        assert (
+            self._sanity_check_mask.all()
+        ), "Some instances in pool are not pseudo-labelled. Something went wrong."
+
         # reset mask
-        self._debug_mask = torch.zeros(self._pseudo_labels.size(0), dtype=torch.bool)
+        self._sanity_check_mask = torch.zeros(
+            self._pseudo_labels.size(0), dtype=torch.bool
+        )
 
         self._pool.override_targets(self._pseudo_labels.clone())
 
         if self._log_dir is not None:
-            # original pool labels w/o augmentation and metadata from PDS
+            # original pool labels w/o augmentation and metadata from PseudoLabelledDataset
             with self._pool.no_augmentation():
                 with self._pool.no_fluff():
                     with self._pool.original_labels():
@@ -517,8 +545,14 @@ class PLUpdater:
 
 
 def _calib_metrics(
-    model, ds, log_dir, other_engine=None, device=None, pred_transform=lambda x: x.exp()
+    model,
+    ds,
+    log_dir,
+    other_engine=None,
+    device=None,
+    pred_transform=lambda x: x.exp(),
 ):
+    # given a model and dataset, runs one epoch to calculate the calibration metrics
     kwargs = (
         {} if not torch.cuda.is_available() else dict(num_workers=4, pin_memory=True)
     )
@@ -535,14 +569,14 @@ def _calib_metrics(
 
 
 class _WithTransform(torchdata.Dataset):
-    def __init__(self, dataset: torchdata.Dataset, transform, with_targets):
+    def __init__(self, dataset: torchdata.Dataset, transform, has_targets):
         super(_WithTransform, self).__init__()
         self._dataset = dataset
         self._transform = transform
-        self._with_targets = with_targets
+        self._has_targets = has_targets
 
     def __getitem__(self, idx):
-        if self._with_targets:
+        if self._has_targets:
             x, y = self._dataset[idx]
             return self._transform(x), y
         # (x,) only
@@ -552,8 +586,14 @@ class _WithTransform(torchdata.Dataset):
         return len(self._dataset)
 
 
-def temp_ds_transform(transform, with_targets=False):
+def dataset_transform_functor(transform, has_targets: bool = False):
     def _trans(dataset: torchdata.Dataset) -> torchdata.Dataset:
-        return _WithTransform(dataset, transform, with_targets)
+        return _WithTransform(dataset, transform, has_targets)
 
     return _trans
+
+
+# Edited on Sat Jan  2 21:17:41 GMT 2021
+# assigning to a new function name for backward-compatibility
+# because naming functions is hard.
+temp_ds_transform = dataset_transform_functor
