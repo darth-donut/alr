@@ -267,6 +267,7 @@ class PLMixupTrainer:
         self._lr_patience = lr_patience
         self._log_dir = log_dir
         self.soft_label_history = None
+        # like soft_label_history but on augmented input to induce noise
         self.soft_augmented_label_history = None
 
     def _instantiate_optimiser(self):

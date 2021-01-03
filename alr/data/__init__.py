@@ -340,6 +340,7 @@ class TransformedDataset(torchdata.Dataset):
     """
     Transforms and augments an untransformed and unaugmented dataset.
     """
+
     def __init__(
         self,
         raw_dataset: torchdata.Dataset,
