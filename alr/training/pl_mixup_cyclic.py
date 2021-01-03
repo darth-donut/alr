@@ -10,12 +10,12 @@ from torch.nn import functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from alr.training.pl_mixup import (
-    IndexMarker,
-    PDS,
+    PseudoLabelledDataset,
     onehot_transform,
     create_warmup_trainer,
     create_plmixup_trainer,
     PLMixupTrainer,
+    DataMarker,
 )
 from alr.training.progress_bar.ignite_progress_bar import ProgressBar
 from alr.training.samplers import RandomFixedLengthSampler, MinLabelledSampler
@@ -31,7 +31,7 @@ class CyclicPLMixupTrainer(PLMixupTrainer):
         epochs: Optional[Tuple[int, int, int]] = (50, 400, 60),
     ):
         if isinstance(self._patience, int):
-            pat1, pat2 = self._patience
+            pat1 = pat2 = self._patience
         else:
             pat1, pat2 = self._patience[0], self._patience[1]
         history = {
@@ -40,19 +40,22 @@ class CyclicPLMixupTrainer(PLMixupTrainer):
             "override_acc": [],
         }
         optimiser = self._instantiate_optimiser()
-        train = PDS(
-            IndexMarker(train, mark=IndexMarker.LABELLED),
+        train = PseudoLabelledDataset(
+            train,
+            mark=DataMarker.LABELLED,
             transform=self._train_transform,
             augmentation=self._data_augmentation,
             target_transform=onehot_transform(self._num_classes),
         )
-        pool = PDS(
-            IndexMarker(pool, mark=IndexMarker.PSEUDO_LABELLED),
+        pool = PseudoLabelledDataset(
+            pool,
+            mark=DataMarker.PSEUDO_LABELLED,
             transform=self._train_transform,
             augmentation=self._data_augmentation,
         )
-        val = PDS(
-            IndexMarker(val, mark=None),
+        val = PseudoLabelledDataset(
+            val,
+            mark=DataMarker.LABELLED,
             transform=self._test_transform,
         )
         val._with_metadata = False

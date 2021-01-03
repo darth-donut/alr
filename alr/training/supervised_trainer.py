@@ -28,7 +28,7 @@ class Trainer:
         patience: Optional[int] = None,
         reload_best: Optional[bool] = False,
         lr_scheduler: Optional[str] = None,
-        lr_scheduler_kwargs: Optional[dict] = {},
+        lr_scheduler_kwargs: Optional[dict] = None,
         device: _DeviceType = None,
         *args,
         **kwargs,
@@ -44,6 +44,9 @@ class Trainer:
             patience (int, optional): if not `None`, then validation accuracy will be used to determine when to stop.
             reload_best (bool, optional): patience must be non-`None` if this is set to `True`: reloads the best model
                 according to validation accuracy at the end of training.
+            lr_scheduler (str, optional): a string that corresponds to the type of learning rate scheduler
+                in `torch.optim.lr_scheduler`.
+            lr_scheduler_kwargs (dict, optional): arguments to the constructor of `lr_scheduler`
             device (str, None, torch.device): device type.
             *args (Any, optional): arguments to be passed into the optimiser.
             **kwargs (Any, optional): keyword arguments to be passed into the optimiser.
@@ -59,6 +62,7 @@ class Trainer:
         self._device = device
         self._model = model
         self._lr_scheduler = lr_scheduler
+        lr_scheduler_kwargs = {} if lr_scheduler_kwargs is None else lr_scheduler_kwargs
         if lr_scheduler is not None:
             self._lr_scheduler = getattr(torch.optim.lr_scheduler, lr_scheduler)(
                 self._optim, **lr_scheduler_kwargs

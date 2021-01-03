@@ -220,7 +220,7 @@ def create_pseudo_label_trainer(
     reload_best: Optional[bool] = None,
     epochs: Optional[int] = 1,
     lr_scheduler: Optional[str] = None,
-    lr_scheduler_kwargs: Optional[dict] = {},
+    lr_scheduler_kwargs: Optional[dict] = None,
     device: _DeviceType = None,
     *args,
     **kwargs,
@@ -293,10 +293,10 @@ class EphemeralTrainer:
         patience: Optional[Union[int, tuple]] = None,
         reload_best: Optional[bool] = False,
         lr_scheduler: Optional[str] = None,
-        lr_scheduler_kwargs: Optional[dict] = {},
+        lr_scheduler_kwargs: Optional[dict] = None,
         init_pseudo_label_dataset: Optional[torchdata.Dataset] = None,
         device: _DeviceType = None,
-        pool_loader_kwargs: Optional[dict] = {},
+        pool_loader_kwargs: Optional[dict] = None,
         *args,
         **kwargs,
     ):
@@ -314,11 +314,15 @@ class EphemeralTrainer:
         self._kwargs = kwargs
         self._threshold = threshold
         self._log_dir = log_dir
-        self._pool_loader_kwargs = pool_loader_kwargs
+        self._pool_loader_kwargs = (
+            pool_loader_kwargs if pool_loader_kwargs is not None else {}
+        )
         self._min_labelled = min_labelled
         self._rfls_len = random_fixed_length_sampler_length
         self._lr_scheduler = lr_scheduler
-        self._lr_scheduler_kwargs = lr_scheduler_kwargs
+        self._lr_scheduler_kwargs = (
+            lr_scheduler_kwargs if lr_scheduler_kwargs is not None else {}
+        )
         self._init_pseudo_label_dataset = init_pseudo_label_dataset
         self.last_pseudo_label_dataset = None
 
@@ -330,14 +334,10 @@ class EphemeralTrainer:
         epochs: Optional[int] = 1,
     ):
         if self._patience:
-            pat1 = (
-                self._patience if isinstance(self._patience, int) else self._patience[0]
-            )
-            pat2 = (
-                self._patience
-                if isinstance(self._patience, int)
-                else self._patience[-1]
-            )
+            if isinstance(self._patience, int):
+                pat1 = pat2 = self._patience
+            else:
+                pat1, pat2 = self._patience
         else:
             pat1 = pat2 = None
         if self._patience and val_loader is None:

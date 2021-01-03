@@ -233,7 +233,7 @@ class PerformanceTracker:
         if self.last_acc is None or acc > self.last_acc:
             self.reset()
             if self._model_filename.exists():
-                # 2 am paranoia: make sure old model weight is overridden
+                # 2 am paranoia: make sure old model weights are overridden
                 self._model_filename.unlink()
             torch.save(self.model.state_dict(), str(self._model_filename))
             self.last_acc = acc

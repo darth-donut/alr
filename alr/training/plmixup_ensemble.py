@@ -6,10 +6,10 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from alr.training.pl_mixup import (
     mixup,
     reg_mixup_loss,
-    PDS,
-    IndexMarker,
+    PseudoLabelledDataset,
     onehot_transform,
     create_warmup_trainer,
+    DataMarker,
 )
 from alr.training.utils import EarlyStopper, PerformanceTracker
 from alr.utils._type_aliases import _DeviceType
@@ -32,8 +32,8 @@ class PLMixupEnsembleTrainer:
         optimiser: str,
         train_transform: Callable,
         test_transform: Callable,
-        optimiser_kwargs,
-        loader_kwargs,
+        optimiser_kwargs: dict,
+        loader_kwargs: dict,
         rfls_length: int,
         log_dir: Optional[str] = None,
         alpha: Optional[float] = 1.0,
@@ -77,22 +77,25 @@ class PLMixupEnsembleTrainer:
     ):
         # stage 1
         if isinstance(self._patience, int):
-            pat1, pat2 = self._patience
+            pat1 = pat2 = self._patience
         else:
             pat1, pat2 = self._patience[0], self._patience[1]
-        train = PDS(
-            IndexMarker(train, mark=IndexMarker.LABELLED),
+        train = PseudoLabelledDataset(
+            train,
+            mark=DataMarker.LABELLED,
             transform=self._train_transform,
             augmentation=self._data_augmentation,
             target_transform=onehot_transform(self._num_classes),
         )
-        pool = PDS(
-            IndexMarker(pool, mark=IndexMarker.PSEUDO_LABELLED),
+        pool = PseudoLabelledDataset(
+            pool,
+            mark=DataMarker.PSEUDO_LABELLED,
             transform=self._train_transform,
             augmentation=self._data_augmentation,
         )
-        val = PDS(
-            IndexMarker(val, mark=None),
+        val = PseudoLabelledDataset(
+            val,
+            mark=DataMarker.LABELLED,
             transform=self._test_transform,
         )
         val._with_metadata = False

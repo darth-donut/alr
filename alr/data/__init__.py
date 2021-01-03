@@ -44,6 +44,9 @@ class UnlabelledDataset(torchdata.Dataset):
         self.debug = debug
         if self.debug:
             assert self._label_fn is None
+        # Edited on Sat Jan  2 21:59:40 GMT 2021
+        # alias for backwards compatibility.
+        self.tmp_debug = self.true_labels
 
     def label(self, idxs: Sequence[int]) -> torchdata.Dataset:
         r"""
@@ -144,9 +147,12 @@ class UnlabelledDataset(torchdata.Dataset):
         self._len = len(self._dataset)
 
     @contextmanager
-    def tmp_debug(self):
+    def true_labels(self):
         r"""
-        Temporarily sets `debug` to `True`. Useful for debugging/evaluation purposes.
+        When the dataset is index within this context, it returns the label as well. It's useful for
+        debugging/evaluation purposes. This assumes `label_fn` was None -- which indicates that the dataset
+        came with labels to begin with. If `label_fn` is not None, then this method does nothing -- the indexed
+        datum will only contain features, as usual.
 
         Returns:
             :class:`UnlabelledDataset`: `self`
@@ -331,6 +337,10 @@ class RelabelDataset(torchdata.Dataset):
 
 
 class TransformedDataset(torchdata.Dataset):
+    """
+    Transforms and augments an untransformed and unaugmented dataset.
+    """
+
     def __init__(
         self,
         raw_dataset: torchdata.Dataset,
